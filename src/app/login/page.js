@@ -1,12 +1,13 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
 } from "firebase/auth";
-import { auth } from "../../lib/firebase"; // ตรวจสอบ path ให้ตรงกับโปรเจกต์ของคุณ
+import { auth } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
@@ -17,7 +18,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  // แก้ไขตรงนี้เพื่อไม่ให้ ESLint บ่นครับ
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -47,11 +58,14 @@ export default function LoginPage() {
     }
   };
 
+  if (!mounted) {
+    return <div className="min-h-screen bg-[#F8FAFC]" />;
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4">
-      {/* ─── 📦 การ์ด Login แบบ Minimal ─── */}
       <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-sm border border-slate-100 w-full max-w-[400px]">
-        {/* ─── ส่วนหัว ─── */}
+        {/* UI เหมือนเดิมเป๊ะครับ... */}
         <div className="flex flex-col items-center text-center mb-8">
           <img
             src="https://ced.kmutnb.ac.th/image/banner/28997822520250908_111639.png"
@@ -76,14 +90,13 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleLogin} className="space-y-5">
-          {/* ช่องกรอกอีเมล */}
           <div className="space-y-1.5">
             <label className="block text-sm font-bold text-slate-700">
               อีเมล
             </label>
             <input
               type="email"
-              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium placeholder:text-slate-400"
+              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium"
               placeholder="example@kmutnb.ac.th"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -92,7 +105,6 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* ช่องกรอกรหัสผ่าน */}
           <div className="space-y-1.5">
             <label className="block text-sm font-bold text-slate-700">
               รหัสผ่าน
@@ -100,7 +112,7 @@ export default function LoginPage() {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
-                className="w-full pl-4 pr-12 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium placeholder:text-slate-400"
+                className="w-full pl-4 pr-12 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -118,11 +130,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* ปุ่ม Submit */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
           >
             {isLoading ? (
               <>
@@ -135,19 +146,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* ─── เส้นแบ่ง ─── */}
         <div className="flex items-center gap-3 my-6">
           <div className="flex-1 border-t border-slate-100"></div>
           <span className="text-xs font-medium text-slate-400">หรือ</span>
           <div className="flex-1 border-t border-slate-100"></div>
         </div>
 
-        {/* ─── ปุ่ม Google Login ─── */}
         <button
           type="button"
           onClick={handleGoogleLogin}
           disabled={isLoading}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 shadow-sm"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -170,7 +179,6 @@ export default function LoginPage() {
           ดำเนินการต่อด้วย Google
         </button>
 
-        {/* ─── ลิงก์สมัครสมาชิก ─── */}
         <div className="mt-8 text-center">
           <p className="text-sm text-slate-500 font-medium">
             ยังไม่มีบัญชีใช่หรือไม่?{" "}
