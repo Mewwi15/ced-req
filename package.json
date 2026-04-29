@@ -9,9 +9,20 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "adm-zip": "^0.5.17",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "docx": "^9.6.1",
+    "docxtemplater": "^3.68.6",
+    "file-saver": "^2.0.5",
+    "firebase": "^12.12.1",
+    "lucide-react": "^1.11.0",
     "next": "16.2.4",
+    "pizzip": "^3.2.0",
+    "puppeteer": "^24.42.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-to-print": "^3.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
