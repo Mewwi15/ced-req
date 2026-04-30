@@ -37,7 +37,7 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
+      router.push("/reqform/dashboard");
     } catch (err) {
       setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
       setIsLoading(false);
@@ -51,7 +51,7 @@ export default function LoginPage() {
 
     try {
       await signInWithPopup(auth, provider);
-      router.push("/dashboard");
+      router.push("/reqform/dashboard");
     } catch (err) {
       setError("เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google");
       setIsLoading(false);
@@ -65,7 +65,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4">
       <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-sm border border-slate-100 w-full max-w-[400px]">
-        {/* UI เหมือนเดิมเป๊ะครับ... */}
         <div className="flex flex-col items-center text-center mb-8">
           <img
             src="https://ced.kmutnb.ac.th/image/banner/28997822520250908_111639.png"
@@ -183,7 +182,7 @@ export default function LoginPage() {
           <p className="text-sm text-slate-500 font-medium">
             ยังไม่มีบัญชีใช่หรือไม่?{" "}
             <Link
-              href="/register"
+              href="/reqform/register"
               className="text-emerald-600 font-bold hover:text-emerald-700 transition-colors"
             >
               สมัครสมาชิก

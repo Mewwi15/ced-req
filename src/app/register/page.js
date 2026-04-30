@@ -121,7 +121,6 @@ export default function RegisterPage() {
     if (error) setError("");
   };
 
-  // 📍 ตัวแปรเช็คความปลอดภัยของรหัสผ่าน
   const hasLength = formData.password.length >= 8;
   const hasUppercase = /[A-Z]/.test(formData.password);
   const hasLowercase = /[a-z]/.test(formData.password);
@@ -132,7 +131,6 @@ export default function RegisterPage() {
   const isPasswordMatch =
     formData.password !== "" && formData.password === formData.confirmPassword;
 
-  // คำนวณความแข็งแกร่งเป็น % เพื่อทำแถบสี (Progress Bar)
   const strengthScore = [
     hasLength,
     hasUppercase,
@@ -259,7 +257,7 @@ export default function RegisterPage() {
               <InputField
                 label="ชื่อจริง"
                 name="firstNameTH"
-                placeholder="พงศกร"
+                placeholder="ชื่อ.."
                 value={formData.firstNameTH}
                 onChange={handleChange}
                 required
@@ -270,7 +268,7 @@ export default function RegisterPage() {
               <InputField
                 label="นามสกุล"
                 name="lastNameTH"
-                placeholder="ศรีสระเกษ"
+                placeholder="นามสกุล.."
                 value={formData.lastNameTH}
                 onChange={handleChange}
                 required
