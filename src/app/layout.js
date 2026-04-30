@@ -23,7 +23,10 @@ export default function RootLayout({ children }) {
       lang="th" // 📍 เปลี่ยนเป็นภาษาไทย
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body
+        className="min-h-full flex flex-col"
+        suppressHydrationWarning={true}
+      >
         {/* 📍 หุ้มทั้งแอปด้วย AuthProvider */}
         <AuthProvider>{children}</AuthProvider>
       </body>
