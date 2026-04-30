@@ -20,14 +20,16 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html
-      lang="th" // 📍 เปลี่ยนเป็นภาษาไทย
+      lang="th"
+      // 📍 ใส่ตรงนี้เพิ่มด้วยครับ
+      suppressHydrationWarning={true}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body
         className="min-h-full flex flex-col"
+        // 📍 ตรงนี้มีอยู่แล้ว ดีมากครับ
         suppressHydrationWarning={true}
       >
-        {/* 📍 หุ้มทั้งแอปด้วย AuthProvider */}
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
