@@ -4,6 +4,7 @@ const nextConfig = {
   reactCompiler: true,
 
   basePath: "/reqform",
+  trailingSlash: true,
 };
 
 export default nextConfig;
