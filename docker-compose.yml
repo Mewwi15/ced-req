@@ -1,8 +1,16 @@
-version: "3.8"
 services:
-  ced-web:
-    build: .
+  ced-web: # (ชื่อ service Next.js เดิมของคุณ)
     container_name: ced-document-app
+    build: .
+    # ⚠️ สำคัญมาก: ลบคำว่า ports: - "3000:3000" ออกจากตรงนี้เลยครับ
+    # เพื่อให้ Next.js คุยได้แค่ในกล่องเท่านั้น
+
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: ced-nginx
     ports:
-      - "3000:3000"
-    restart: always
+      - "3000:80" # ให้ Nginx มารับข้อมูลที่พอร์ต 3000 แทน
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ced-web
