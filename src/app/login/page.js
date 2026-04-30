@@ -22,7 +22,6 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
-  // แก้ไขตรงนี้เพื่อไม่ให้ ESLint บ่นครับ
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
@@ -37,7 +36,7 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/reqform/dashboard");
+      router.push("/dashboard");
     } catch (err) {
       setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
       setIsLoading(false);
@@ -51,7 +50,7 @@ export default function LoginPage() {
 
     try {
       await signInWithPopup(auth, provider);
-      router.push("/reqform/dashboard");
+      router.push("/dashboard");
     } catch (err) {
       setError("เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google");
       setIsLoading(false);

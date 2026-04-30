@@ -3,7 +3,7 @@ const nextConfig = {
   /* config options here */
   reactCompiler: true,
 
-  assetPrefix: "/reqform",
+  basePath: "/reqform",
 };
 
 export default nextConfig;
