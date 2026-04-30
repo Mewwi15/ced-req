@@ -37,7 +37,9 @@ export const AuthProvider = ({ children }) => {
         setUserProfile(null);
 
         // เช็ค path แบบปลอดภัย (Next.js usePathname จะตัด basePath ออกให้แล้ว)
-        const isPublicPage = pathname === "/login" || pathname === "/register";
+        const publicPaths = ["/login", "/login/", "/register", "/register/"];
+        const isPublicPage = publicPaths.includes(pathname);
+
         if (!isPublicPage) {
           router.push("/login");
         }
