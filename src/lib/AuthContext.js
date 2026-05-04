@@ -18,27 +18,47 @@ export const AuthProvider = ({ children }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    setMounted(true); // 📍 บอกว่า Client พร้อมทำงานแล้ว
+    setMounted(true);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      // 📍 สร้างรายการหน้าเว็บที่คนยังไม่ล็อกอินก็เข้าได้
+      const publicPaths = ["/login", "/login/", "/register", "/register/"];
+      const isPublicPage = publicPaths.includes(pathname);
+
       if (firebaseUser) {
         setUser(firebaseUser);
         try {
           const docRef = doc(db, "users", firebaseUser.uid);
           const docSnap = await getDoc(docRef);
+
           if (docSnap.exists()) {
-            setUserProfile(docSnap.data());
+            const profileData = docSnap.data();
+            setUserProfile(profileData);
+
+            const isAdmin =
+              profileData.roles && profileData.roles.includes("admin");
+
+            // 🚦 กฎจราจรข้อ 1: ถ้าล็อกอินแล้ว แต่ดันมาอยู่หน้า Login/Register
+            // ให้ส่งตัวไปยังบ้านของแต่ละคนทันที
+            if (isPublicPage) {
+              router.push(isAdmin ? "/admin" : "/dashboard");
+            }
+            // 🚦 กฎจราจรข้อ 2: ถ้าไม่ใช่แอดมิน แต่พยายามเข้าห้องแอดมิน
+            else if (pathname.startsWith("/admin") && !isAdmin) {
+              router.push("/dashboard");
+            }
+            // 🚦 กฎจราจรข้อ 3: ถ้าเป็นแอดมิน แต่ไปเดินเล่นห้องนักศึกษา
+            else if (pathname.startsWith("/dashboard") && isAdmin) {
+              router.push("/admin");
+            }
           }
         } catch (error) {
           console.error("Error fetching profile:", error);
         }
       } else {
+        // 🚦 กฎจราจรข้อ 4: ถ้ายังไม่ล็อกอิน แต่พยายามเข้าหน้าอื่นๆ ที่ไม่ใช่หน้า Public
         setUser(null);
         setUserProfile(null);
-
-        // เช็ค path แบบปลอดภัย (Next.js usePathname จะตัด basePath ออกให้แล้ว)
-        const publicPaths = ["/login", "/login/", "/register", "/register/"];
-        const isPublicPage = publicPaths.includes(pathname);
 
         if (!isPublicPage) {
           router.push("/login");
