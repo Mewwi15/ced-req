@@ -12,21 +12,12 @@ import {
   Clock,
   Search as SearchIcon,
   XCircle,
-  Plus,
-  Trash2,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { saveAs } from "file-saver";
 
-// ─── ฟังก์ชันแปลงเลขอารบิกเป็นเลขไทย ───
-const toThaiNumerals = (numStr) => {
-  const thaiNumbers = ["๐", "๑", "๒", "๓", "๔", "๕", "๖", "๗", "๘", "๙"];
-  return String(numStr).replace(/[0-9]/g, (match) => thaiNumbers[match]);
-};
-
-// ─── Component ไอคอนสถานะสำหรับแสดงใน Modal ───
 const StatusIcon = ({ status }) => {
   if (status === "อนุมัติแล้ว")
     return <CheckCircle2 size={18} className="text-emerald-500" />;
@@ -44,15 +35,8 @@ export default function RequestModal({ request, onClose, setRequests }) {
   const [currentStatus, setCurrentStatus] = useState(request.status);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // ─── State รายชื่อผู้เชี่ยวชาญ (แอดมินกรอกเอง) ───
-  const [experts, setExperts] = useState([{ name: "", type: "ด้านเนื้อหา" }]);
-
-  const componentRef = useRef();
-
-  const handlePrint = useReactToPrint({
-    content: () => componentRef.current,
-    documentTitle: `คำร้อง_${request?.studentInfo?.fullName}`,
-  });
+  // ✅ แก้ไขให้ตรงกับเวอร์ชันใหม่ของ react-to-print
+  const contentRef = useRef(null);
 
   const handleStatusChange = async (newStatus) => {
     setIsUpdating(true);
@@ -71,23 +55,9 @@ export default function RequestModal({ request, onClose, setRequests }) {
     }
   };
 
-  // ─── ฟังก์ชันจัดการผู้เชี่ยวชาญ ───
-  const addExpert = () =>
-    setExperts([...experts, { name: "", type: "ด้านเนื้อหา" }]);
-
-  const removeExpert = (i) => setExperts(experts.filter((_, idx) => idx !== i));
-
-  const updateExpert = (i, field, value) => {
-    const updated = [...experts];
-    updated[i][field] = value;
-    setExperts(updated);
-  };
-
-  // ─── ฟังก์ชันอัจฉริยะ โหลดได้ทุกฟอร์ม ───
   const generateDocument = async (templateFileName, outputName, data) => {
     try {
       const response = await fetch(`/reqform/templates/${templateFileName}`);
-
       if (!response.ok) {
         throw new Error(
           `ไม่พบไฟล์ ${templateFileName} ในระบบ (HTTP ${response.status})`,
@@ -111,24 +81,56 @@ export default function RequestModal({ request, onClose, setRequests }) {
         year: "numeric",
       });
 
-      // กรองเฉพาะผู้เชี่ยวชาญที่กรอกชื่อแล้ว
-      const filteredExperts = experts.filter((e) => e.name.trim() !== "");
+      // ดึงผู้เชี่ยวชาญจาก Firebase โดยตรง
+      const contentExperts = (data.experts?.content || []).filter(
+        (e) => e.name?.trim() !== "",
+      );
+      const technicalExperts = (data.experts?.technical || []).filter(
+        (e) => e.name?.trim() !== "",
+      );
+      const allExpertsCombined = [
+        ...contentExperts.map((e) => ({
+          expertName: e.name,
+          expertType: "ด้านเนื้อหา",
+        })),
+        ...technicalExperts.map((e) => ({
+          expertName: e.name,
+          expertType: "ด้านเทคนิค",
+        })),
+      ];
+
+      // 🌟 ชุดตัวแปรใหม่สำหรับฟอร์ม "ขอเก็บข้อมูล/ผู้เชี่ยวชาญ"
+      const val = (value) =>
+        value && value.toString().trim() !== "" ? value : "-";
+      const checked = "✓";
+      const unchecked = " ";
+      const docDate = requestDate.getDate().toString();
+      const docMonth = new Intl.DateTimeFormat("th-TH", {
+        month: "long",
+      }).format(requestDate);
+      const docYear = (requestDate.getFullYear() + 543).toString();
+
+      const cExp = data.experts?.content || [];
+      const tExp = data.experts?.technical || [];
+      const advs = data.academicWork?.advisors || [];
+
+      // ดึงตัวแปร degree มาไว้เช็คคำ
+      const degreeStr = data.studentInfo?.degree || "";
 
       docx.render({
+        // --- 🟢 ข้อมูลเดิม (สำหรับฟอร์มบันทึกข้อความและคำร้องทั่วไป) ---
         docNumber: docNumber || "อว ๐๖๐๑.๑๒/",
         dateStr: thaiDateFormatter.format(requestDate),
-
         prefix: data.studentInfo?.prefix || "",
         fullName: data.studentInfo?.fullName || "",
         studentId: data.studentInfo?.studentId || "",
-        degree: data.studentInfo?.degree || "",
-        eduLevel: data.studentInfo?.degree || "",
+        degree: degreeStr,
+        eduLevel: degreeStr,
         department: data.studentInfo?.department || "",
         major: data.studentInfo?.major || "",
         phoneMobile: data.studentInfo?.phoneMobile || "",
         studyPlan: data.studentInfo?.studyPlan || "",
         hasStudyPlan: !!data.studentInfo?.studyPlan,
-
         workTitle: data.academicWork?.workTitle || "",
         workType: data.academicWork?.workType || "",
         mainAdvisor:
@@ -136,23 +138,115 @@ export default function RequestModal({ request, onClose, setRequests }) {
         advisors: (data.academicWork?.advisors || [])
           .filter((n) => n.trim() !== "")
           .map((n) => ({ name: n })),
-
-        // ผู้เชี่ยวชาญที่แอดมินกรอก
-        experts: filteredExperts.map((e) => ({
-          expertName: e.name,
-          expertType: e.type,
-        })),
-        allExperts: filteredExperts.map((e, i) => ({
+        experts: allExpertsCombined,
+        allExperts: allExpertsCombined.map((e, i) => ({
           index: i + 1,
-          expertName: e.name,
+          expertName: e.expertName,
         })),
+
+        // --- 🌟 ข้อมูลใหม่ (สำหรับฟอร์มขอเก็บข้อมูล/แต่งตั้งผู้เชี่ยวชาญ) ---
+        docDate: docDate,
+        docMonth: docMonth,
+        docYear: docYear,
+
+        signName: val(data.studentInfo?.fullName), // ชื่อสำหรับช่องเซ็น (ไม่มีคำนำหน้า)
+        fullSignName: val(
+          `${data.studentInfo?.prefix || ""}${data.studentInfo?.fullName || ""}`,
+        ), // ชื่อเต็มในวงเล็บ
+
+        branch: val(data.studentInfo?.department),
+        address: val(data.studentInfo?.address),
+        phoneWork: val(data.studentInfo?.phoneWork),
+        phoneHome: val(data.studentInfo?.phoneHome),
+
+        // Checkbox: เรื่อง
+        reqTypeCollect: (data.requestDetails?.purpose || "").includes(
+          "เก็บรวบรวม",
+        )
+          ? checked
+          : unchecked,
+        reqTypeExpert: (data.requestDetails?.purpose || "").includes(
+          "ผู้เชี่ยวชาญ",
+        )
+          ? checked
+          : unchecked,
+
+        // Checkbox: สิ่งที่ส่งมาด้วย
+        attQ: data.requestDetails?.questionnaireCount > 0 ? checked : unchecked,
+        attQNum: val(data.requestDetails?.questionnaireCount),
+        attEval: data.requestDetails?.evaluationCount > 0 ? checked : unchecked,
+        attEvalNum: val(data.requestDetails?.evaluationCount),
+        attExp: cExp.length > 0 || tExp.length > 0 ? checked : unchecked,
+        attOther:
+          data.requestDetails?.purpose === "อื่นๆ" ? checked : unchecked,
+        attOtherDesc:
+          data.requestDetails?.purpose === "อื่นๆ"
+            ? val(data.requestDetails?.purposeOther)
+            : "-",
+
+        // 🌟 Checkbox: ระดับการศึกษา (รองรับทั้งชื่อย่อและชื่อเต็ม)
+        degMaster:
+          degreeStr.includes("โท") || degreeStr.includes("มหาบัณฑิต")
+            ? checked
+            : unchecked,
+        degDoc:
+          degreeStr.includes("เอก") || degreeStr.includes("ดุษฎีบัณฑิต")
+            ? checked
+            : unchecked,
+
+        // Checkbox: ขณะนี้กำลังทำ
+        workTypeThesis: (data.academicWork?.workType || "").includes(
+          "วิทยานิพนธ์",
+        )
+          ? checked
+          : unchecked,
+        workTypeIS: (data.academicWork?.workType || "").includes("อิสระ")
+          ? checked
+          : unchecked,
+
+        // Checkbox: มีความประสงค์
+        objCollect: (data.requestDetails?.purpose || "").includes("เก็บรวบรวม")
+          ? checked
+          : unchecked,
+        objExpert: (data.requestDetails?.purpose || "").includes("ผู้เชี่ยวชาญ")
+          ? checked
+          : unchecked,
+        objOther:
+          data.requestDetails?.purpose === "อื่นๆ" ? checked : unchecked,
+
+        // รายชื่อกรรมการที่ปรึกษา
+        adv1: val(advs[0]),
+        adv2: val(advs[1]),
+        adv3: val(advs[2]),
+        adv4: val(advs[3]),
+
+        // รายชื่อผู้เชี่ยวชาญด้านเนื้อหา (หน้า 2)
+        cName1: val(cExp[0]?.name),
+        cEdu1: val(cExp[0]?.education),
+        cWork1: val(cExp[0]?.workplace),
+        cName2: val(cExp[1]?.name),
+        cEdu2: val(cExp[1]?.education),
+        cWork2: val(cExp[1]?.workplace),
+        cName3: val(cExp[2]?.name),
+        cEdu3: val(cExp[2]?.education),
+        cWork3: val(cExp[2]?.workplace),
+
+        // รายชื่อผู้เชี่ยวชาญด้านเทคนิค (หน้า 2)
+        tName1: val(tExp[0]?.name),
+        tEdu1: val(tExp[0]?.education),
+        tWork1: val(tExp[0]?.workplace),
+        tName2: val(tExp[1]?.name),
+        tEdu2: val(tExp[1]?.education),
+        tWork2: val(tExp[1]?.workplace),
+        tName3: val(tExp[2]?.name),
+        tEdu3: val(tExp[2]?.education),
+        tWork3: val(tExp[2]?.workplace),
       });
 
       const out = docx.getZip().generate({ type: "arraybuffer" });
       const blob = new Blob([out], {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
-
       saveAs(blob, `${outputName}_${data.studentInfo?.fullName}.docx`);
     } catch (error) {
       console.error("Error generating document:", error);
@@ -162,10 +256,8 @@ export default function RequestModal({ request, onClose, setRequests }) {
     }
   };
 
-  // ─── เช็คระดับการศึกษาแล้วโหลดไฟล์อัตโนมัติ ───
   const handleDownloadDegreeForm = () => {
     const degree = request.studentInfo?.degree || "";
-
     if (
       degree.includes("ดุษฎีบัณฑิต") ||
       degree.includes("ปริญญาเอก") ||
@@ -214,8 +306,9 @@ export default function RequestModal({ request, onClose, setRequests }) {
 
         {/* ─── Body ─── */}
         <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
+          {/* ✅ เปลี่ยนชื่อ ref ตรงนี้ให้ตรงกับด้านบน */}
           <div
-            ref={componentRef}
+            ref={contentRef}
             className="p-10 bg-white font-['TH_Sarabun_New'] text-black hidden print:block"
           >
             {/* โค้ด Print ซ่อนไว้ */}
@@ -239,7 +332,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
                     </p>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
                   <div>
                     <p className="text-slate-400 font-medium mb-1">
@@ -294,11 +386,53 @@ export default function RequestModal({ request, onClose, setRequests }) {
                   </div>
                 </div>
               </section>
+
+              {/* ─── แสดงรายชื่อผู้เชี่ยวชาญจาก Firebase ─── */}
+              {(request.experts?.content?.length > 0 ||
+                request.experts?.technical?.length > 0) && (
+                <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                    รายชื่อผู้เชี่ยวชาญ
+                  </h4>
+                  <div className="space-y-3 text-sm">
+                    {(request.experts?.content || [])
+                      .filter((e) => e.name)
+                      .map((e, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-100"
+                        >
+                          <span className="text-[10px] font-black text-blue-500 bg-blue-100 px-2 py-0.5 rounded-md">
+                            เนื้อหา
+                          </span>
+                          <span className="font-bold text-slate-700">
+                            {e.name}
+                          </span>
+                        </div>
+                      ))}
+                    {(request.experts?.technical || [])
+                      .filter((e) => e.name)
+                      .map((e, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-100"
+                        >
+                          <span className="text-[10px] font-black text-indigo-500 bg-indigo-100 px-2 py-0.5 rounded-md">
+                            เทคนิค
+                          </span>
+                          <span className="font-bold text-slate-700">
+                            {e.name}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </section>
+              )}
             </div>
 
             {/* ─── ขวา: สำหรับเจ้าหน้าที่ ─── */}
             <div className="lg:col-span-2 space-y-6">
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 h-full">
                 <div className="flex items-center gap-2.5 mb-6 pb-4 border-b border-slate-200">
                   <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
                     <FileText size={18} />
@@ -322,52 +456,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
                   />
                 </div>
 
-                {/* รายชื่อผู้เชี่ยวชาญ */}
-                <div className="space-y-2 mb-5">
-                  <label className="text-sm font-bold text-slate-700">
-                    รายชื่อผู้เชี่ยวชาญ
-                  </label>
-                  <div className="space-y-2">
-                    {experts.map((exp, i) => (
-                      <div key={i} className="flex gap-2 items-center">
-                        <input
-                          type="text"
-                          value={exp.name}
-                          onChange={(e) =>
-                            updateExpert(i, "name", e.target.value)
-                          }
-                          placeholder={`ชื่อผู้เชี่ยวชาญ ${i + 1}`}
-                          className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                        />
-                        <select
-                          value={exp.type}
-                          onChange={(e) =>
-                            updateExpert(i, "type", e.target.value)
-                          }
-                          className="px-2 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 text-slate-600"
-                        >
-                          <option value="ด้านเนื้อหา">เนื้อหา</option>
-                          <option value="ด้านเทคนิค">เทคนิค</option>
-                        </select>
-                        {experts.length > 1 && (
-                          <button
-                            onClick={() => removeExpert(i)}
-                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={addExpert}
-                    className="flex items-center gap-1.5 text-sm text-blue-600 font-bold hover:text-blue-700 mt-1"
-                  >
-                    <Plus size={15} /> เพิ่มผู้เชี่ยวชาญ
-                  </button>
-                </div>
-
                 {/* อัปเดตสถานะ */}
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
@@ -378,7 +466,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
                       </span>
                     )}
                   </label>
-
                   <div className="relative group">
                     <select
                       value={currentStatus}
@@ -397,7 +484,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
                       <option value="อนุมัติแล้ว">อนุมัติแล้ว</option>
                       <option value="ถูกปฏิเสธ">ถูกปฏิเสธ</option>
                     </select>
-
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
                       <StatusIcon status={currentStatus} />
                     </div>
@@ -422,21 +508,26 @@ export default function RequestModal({ request, onClose, setRequests }) {
             >
               <Download size={18} /> บันทึกข้อความ
             </button>
-
             <button
               onClick={handleDownloadDegreeForm}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-md active:scale-95"
             >
               <Download size={18} /> โหลดแบบฟอร์มคำร้อง
             </button>
+            {/* 🌟 ปุ่มใหม่สำหรับโหลดฟอร์มเก็บข้อมูลและแต่งตั้งผู้เชี่ยวชาญ */}
+            <button
+              onClick={() =>
+                generateDocument(
+                  "template-data-collection.docx",
+                  "ขอเก็บข้อมูลและแต่งตั้งผู้เชี่ยวชาญ",
+                  request,
+                )
+              }
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-all shadow-md active:scale-95"
+            >
+              <Download size={18} /> ฟอร์มขอเก็บข้อมูลฯ
+            </button>
           </div>
-
-          <button
-            onClick={handlePrint}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold shadow-lg shadow-slate-900/20 active:scale-95 transition-all"
-          >
-            <Printer size={18} /> พิมพ์ใบปะหน้า
-          </button>
         </div>
       </div>
     </div>

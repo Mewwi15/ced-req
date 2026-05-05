@@ -213,7 +213,7 @@ export default function DashboardOverviewPage() {
               </div>
 
               <Link
-                href="dashboard/request/new"
+                href="/dashboard/request/new"
                 className="inline-flex items-center gap-2 px-6 py-3.5 bg-white text-emerald-700 rounded-xl font-black hover:bg-emerald-50 transition-all shadow-md active:scale-95 w-max"
               >
                 <Plus size={20} strokeWidth={3} /> เริ่มต้นเลย

@@ -1,8 +1,12 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 import { useState } from "react";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import {
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 import {
@@ -10,9 +14,9 @@ import {
   AlertCircle,
   ChevronLeft,
   CheckCircle2,
-  XCircle,
   Eye,
   EyeOff,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -31,7 +35,7 @@ const InputField = ({ label, isPassword, ...props }) => {
       <div className="relative">
         <input
           type={inputType}
-          className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium placeholder:text-slate-400"
+          className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
           {...props}
         />
         {isPassword && (
@@ -55,7 +59,7 @@ const SelectField = ({ label, options, ...props }) => {
       <label className="block text-sm font-bold text-slate-700">{label}</label>
       <div className="relative">
         <select
-          className="w-full pl-4 pr-10 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium appearance-none cursor-pointer"
+          className="w-full pl-4 pr-10 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           {...props}
         >
           {options.map((opt) => (
@@ -84,25 +88,16 @@ const SelectField = ({ label, options, ...props }) => {
   );
 };
 
-// ─── 🎨 Helper: Checklist Item ───
-const ValidationItem = ({ isValid, text }) => (
-  <div className="flex items-center gap-2 text-xs font-medium transition-colors duration-300">
-    {isValid ? (
-      <CheckCircle2 className="text-emerald-500" size={16} />
-    ) : (
-      <XCircle className="text-slate-300" size={16} />
-    )}
-    <span className={isValid ? "text-emerald-700" : "text-slate-400"}>
-      {text}
-    </span>
-  </div>
-);
-
 export default function RegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
   const [success, setSuccess] = useState(false);
+
+  // 🌟 State สำหรับจัดการโหมด Google Signup
+  const [isGoogleSignup, setIsGoogleSignup] = useState(false);
+  const [googleUid, setGoogleUid] = useState(null);
 
   const [formData, setFormData] = useState({
     prefix: "นาย",
@@ -140,18 +135,29 @@ export default function RegisterPage() {
   const strengthPercentage = (strengthScore / 4) * 100;
 
   let strengthColor = "bg-slate-200";
-  if (strengthScore === 1 || strengthScore === 2)
+  let strengthText = "กรุณากรอกรหัสผ่าน";
+  if (strengthScore === 1 || strengthScore === 2) {
     strengthColor = "bg-orange-400";
-  else if (strengthScore === 3) strengthColor = "bg-amber-400";
-  else if (strengthScore === 4) strengthColor = "bg-emerald-500";
+    strengthText = "คาดเดาง่าย";
+  } else if (strengthScore === 3) {
+    strengthColor = "bg-amber-400";
+    strengthText = "ปลอดภัย";
+  } else if (strengthScore === 4) {
+    strengthColor = "bg-emerald-500";
+    strengthText = "รัดกุมมาก";
+  }
 
+  // ─── ฟังก์ชันตรวจสอบและบันทึกข้อมูล (บันทึก Firestore) ───
   const handleRegister = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
 
-    if (!isPasswordSecure || !isPasswordMatch) {
-      setError("กรุณาตั้งรหัสผ่านให้ปลอดภัยและตรงกัน");
+    // ถ้าไม่ได้สมัครผ่าน Google ต้องเช็ครหัสผ่านด้วย
+    if (!isGoogleSignup && (!isPasswordSecure || !isPasswordMatch)) {
+      setError(
+        "กรุณาตั้งรหัสผ่านให้ครบ 8 ตัวอักษร (มีพิมพ์เล็ก, พิมพ์ใหญ่ และตัวเลข) และตรงกัน",
+      );
       setIsLoading(false);
       return;
     }
@@ -163,15 +169,21 @@ export default function RegisterPage() {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password,
-      );
-      const user = userCredential.user;
+      let finalUid = googleUid;
 
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
+      // ถ้าเป็นการสมัครปกติ ให้สร้างบัญชีด้วย Email/Password
+      if (!isGoogleSignup) {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password,
+        );
+        finalUid = userCredential.user.uid;
+      }
+
+      // บันทึกข้อมูลลง Firestore
+      await setDoc(doc(db, "users", finalUid), {
+        uid: finalUid,
         email: formData.email,
         prefix: formData.prefix,
         firstNameTH: formData.firstNameTH,
@@ -191,6 +203,60 @@ export default function RegisterPage() {
           ? "อีเมลนี้ถูกลงทะเบียนในระบบเรียบร้อยแล้ว"
           : "ไม่สามารถสร้างบัญชีได้ กรุณาตรวจสอบข้อมูลอีกครั้ง",
       );
+      setIsLoading(false);
+    }
+  };
+
+  // ─── ฟังก์ชันเชื่อมต่อ Google พร้อมเช็คโดเมนมหาลัย ───
+  const handleGoogleAuth = async () => {
+    setIsLoading(true);
+    setError("");
+    setInfoMsg("");
+    try {
+      const provider = new GoogleAuthProvider();
+      // บังคับให้ผู้ใช้เลือกบัญชี (เผื่อมีล็อกอินค้างไว้หลายอัน)
+      provider.setCustomParameters({ prompt: "select_account" });
+
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // 🌟 ทริคตรวจสอบโดเมนอีเมลของ มจพ.
+      const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
+      const isKmutnbEmail = allowedDomains.some((domain) =>
+        user.email.endsWith(domain),
+      );
+
+      if (!isKmutnbEmail) {
+        // ถ้าไม่ใช่อีเมลมหาลัย บังคับเตะออกทันที
+        await auth.signOut();
+        setError(
+          "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // ตรวจสอบใน Firestore ก่อนว่ามีบัญชีนี้หรือยัง
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        // มีบัญชีแล้ว -> เข้าหน้าหลักได้เลย
+        setSuccess(true);
+        setTimeout(() => router.push("/"), 1500);
+      } else {
+        // เด็กใหม่ -> เอา Email แปะในฟอร์ม ให้กรอกข้อมูลต่อ
+        setFormData((prev) => ({ ...prev, email: user.email }));
+        setGoogleUid(user.uid);
+        setIsGoogleSignup(true);
+        setInfoMsg(
+          "ยืนยันอีเมลมหาวิทยาลัยสำเร็จ! กรุณากรอกชื่อ-สกุล และรหัสนักศึกษาให้ครบถ้วนเพื่อเสร็จสิ้นการลงทะเบียน",
+        );
+        setIsLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("เกิดข้อผิดพลาดในการลงทะเบียนด้วย Google หรือคุณกดยกเลิก");
       setIsLoading(false);
     }
   };
@@ -215,10 +281,11 @@ export default function RegisterPage() {
             สร้างบัญชีใหม่
           </h1>
           <p className="text-sm font-medium text-slate-500 mt-1.5">
-            กรอกข้อมูลเพื่อลงทะเบียนใช้งานระบบ
+            กรอกข้อมูลหรือใช้อีเมลมหาวิทยาลัยเพื่อลงทะเบียน
           </p>
         </div>
 
+        {/* 📍 แจ้งเตือนสถานะต่างๆ */}
         {error && (
           <div className="mb-6 p-3.5 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2.5">
             <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
@@ -228,11 +295,20 @@ export default function RegisterPage() {
           </div>
         )}
 
+        {infoMsg && !success && !error && (
+          <div className="mb-6 p-3.5 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
+            <Info className="text-blue-500 shrink-0 mt-0.5" size={18} />
+            <p className="text-blue-700 text-sm font-medium leading-relaxed">
+              {infoMsg}
+            </p>
+          </div>
+        )}
+
         {success && (
           <div className="mb-6 p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2.5">
             <CheckCircle2 className="text-emerald-500 shrink-0" size={18} />
             <p className="text-emerald-700 text-sm font-medium">
-              ลงทะเบียนสำเร็จ! กำลังเข้าสู่ระบบ...
+              เข้าสู่ระบบสำเร็จ! กำลังพาท่านไปหน้าหลัก...
             </p>
           </div>
         )}
@@ -255,7 +331,7 @@ export default function RegisterPage() {
             </div>
             <div className="sm:col-span-4">
               <InputField
-                label="ชื่อจริง"
+                label="ชื่อจริง (ภาษาไทย)"
                 name="firstNameTH"
                 placeholder="ชื่อ.."
                 value={formData.firstNameTH}
@@ -266,7 +342,7 @@ export default function RegisterPage() {
             </div>
             <div className="sm:col-span-5">
               <InputField
-                label="นามสกุล"
+                label="นามสกุล (ภาษาไทย)"
                 name="lastNameTH"
                 placeholder="นามสกุล.."
                 value={formData.lastNameTH}
@@ -306,6 +382,7 @@ export default function RegisterPage() {
             </p>
           </div>
 
+          {/* 📍 ช่องอีเมลจะโดนล็อก ถ้ามาจากการกดปุ่ม Google */}
           <InputField
             label="อีเมล (Email)"
             name="email"
@@ -314,93 +391,110 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={handleChange}
             required
-            disabled={isLoading || success}
+            disabled={isLoading || success || isGoogleSignup}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <InputField
-              label="รหัสผ่าน"
-              name="password"
-              isPassword
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              disabled={isLoading || success}
-            />
-            <InputField
-              label="ยืนยันรหัสผ่าน"
-              name="confirmPassword"
-              isPassword
-              placeholder="••••••••"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              disabled={isLoading || success}
-            />
-          </div>
-
-          {/* 📍 แถบเช็คความปลอดภัยของรหัสผ่าน (Password Strength) */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3 mt-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                ความปลอดภัยรหัสผ่าน
-              </p>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${strengthScore === 4 ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}
-              >
-                {strengthScore}/4
-              </span>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-500 ${strengthColor}`}
-                style={{ width: `${strengthPercentage}%` }}
-              ></div>
-            </div>
-
-            {/* Checklist */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
-              <ValidationItem isValid={hasLength} text="อย่างน้อย 8 ตัวอักษร" />
-              <ValidationItem
-                isValid={hasUppercase}
-                text="ตัวพิมพ์ใหญ่ (A-Z)"
-              />
-              <ValidationItem
-                isValid={hasLowercase}
-                text="ตัวพิมพ์เล็ก (a-z)"
-              />
-              <ValidationItem isValid={hasNumber} text="ตัวเลข (0-9)" />
-              <div className="sm:col-span-2 border-t border-slate-200/60 my-1 pt-2">
-                <ValidationItem
-                  isValid={isPasswordMatch}
-                  text="รหัสผ่านและการยืนยันตรงกัน"
+          {/* 📍 ซ่อนช่องรหัสผ่าน ถ้ายืนยันผ่าน Google แล้ว */}
+          {!isGoogleSignup && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <InputField
+                  label="รหัสผ่าน"
+                  name="password"
+                  isPassword
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  disabled={isLoading || success}
+                />
+                <InputField
+                  label="ยืนยันรหัสผ่าน"
+                  name="confirmPassword"
+                  isPassword
+                  placeholder="••••••••"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  disabled={isLoading || success}
                 />
               </div>
-            </div>
-          </div>
+
+              {formData.password && (
+                <div className="space-y-1.5 mt-2 px-1">
+                  <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-slate-500">ความปลอดภัยรหัสผ่าน</span>
+                    <span
+                      className={
+                        strengthScore === 4
+                          ? "text-emerald-600"
+                          : "text-slate-500"
+                      }
+                    >
+                      {strengthText}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${strengthColor}`}
+                      style={{ width: `${strengthPercentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           <button
             type="submit"
             disabled={
-              isLoading || success || !isPasswordSecure || !isPasswordMatch
+              isLoading ||
+              success ||
+              (!isGoogleSignup && (!isPasswordSecure || !isPasswordMatch))
             }
             className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
                 <Loader2 className="animate-spin" size={18} />
-                <span>กำลังสร้างบัญชี...</span>
+                <span>กำลังดำเนินการ...</span>
               </>
-            ) : success ? (
-              <span>ลงทะเบียนสำเร็จแล้ว</span>
             ) : (
-              <span>ยืนยันการลงทะเบียน</span>
+              <span>
+                {isGoogleSignup
+                  ? "บันทึกข้อมูลและเข้าสู่ระบบ"
+                  : "ยืนยันการลงทะเบียน"}
+              </span>
             )}
           </button>
         </form>
+
+        {/* 📍 ซ่อนปุ่ม Google Login ถ้าเชื่อมต่อ Google ไปแล้ว */}
+        {!isGoogleSignup && (
+          <>
+            <div className="relative flex items-center py-4 mt-2">
+              <div className="flex-grow border-t border-slate-200"></div>
+              <span className="flex-shrink-0 mx-4 text-slate-400 text-sm font-medium">
+                หรือ
+              </span>
+              <div className="flex-grow border-t border-slate-200"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogleAuth}
+              disabled={isLoading || success}
+              className="w-full bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+            >
+              <img
+                src="https://www.svgrepo.com/show/475656/google-color.svg"
+                alt="Google Icon"
+                className="w-5 h-5"
+              />
+              <span>ลงทะเบียนด้วยอีเมลมหาลัย (@kmutnb)</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

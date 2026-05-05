@@ -342,7 +342,7 @@ export default function AdminDashboardPage() {
                           onClick={() => setSelectedRequest(req)}
                           className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-sm group-hover:bg-emerald-600 group-hover:text-white group-hover:shadow-md transition-all flex items-center justify-center gap-2 mx-auto w-full"
                         >
-                          <Eye size={16} /> ตรวจสอบ
+                          <Eye size={16} />
                         </button>
                       </td>
                     </tr>
