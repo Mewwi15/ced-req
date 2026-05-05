@@ -36,6 +36,7 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      router.push("/"); // ล็อกอินสำเร็จให้ไปหน้าหลัก
     } catch (err) {
       setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
       setIsLoading(false);
@@ -46,11 +47,34 @@ export default function LoginPage() {
     setIsLoading(true);
     setError("");
     const provider = new GoogleAuthProvider();
+    // บังคับให้ผู้ใช้เลือกบัญชี (เผื่อมีล็อกอินค้างไว้หลายอัน)
+    provider.setCustomParameters({ prompt: "select_account" });
 
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // 🌟 เพิ่มเงื่อนไขตรวจสอบโดเมนอีเมลของ มจพ.
+      const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
+      const isKmutnbEmail = allowedDomains.some((domain) =>
+        user.email.endsWith(domain),
+      );
+
+      if (!isKmutnbEmail) {
+        // ถ้าไม่ใช่อีเมลมหาลัย บังคับเตะออกทันที
+        await auth.signOut();
+        setError(
+          "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // ถ้าผ่านเงื่อนไข ถือว่าล็อกอินสำเร็จ พาไปหน้าหลักเลย
+      router.push("/");
     } catch (err) {
-      setError("เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google");
+      console.error(err);
+      setError("เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google หรือคุณกดยกเลิก");
       setIsLoading(false);
     }
   };
@@ -92,7 +116,7 @@ export default function LoginPage() {
             </label>
             <input
               type="email"
-              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium"
+              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="example@kmutnb.ac.th"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -108,7 +132,7 @@ export default function LoginPage() {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
-                className="w-full pl-4 pr-12 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium"
+                className="w-full pl-4 pr-12 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border border-transparent focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -129,7 +153,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
+            className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
@@ -152,7 +176,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleGoogleLogin}
           disabled={isLoading}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 shadow-sm"
+          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -172,7 +196,7 @@ export default function LoginPage() {
               fill="#EA4335"
             />
           </svg>
-          ดำเนินการต่อด้วย Google
+          เข้าสู่ระบบด้วยอีเมลมหาลัย (@kmutnb)
         </button>
 
         <div className="mt-8 text-center">

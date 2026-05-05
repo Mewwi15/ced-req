@@ -73,17 +73,6 @@ export default function Sidebar({
             <Clock size={20} />
             ประวัติคำร้อง
           </Link>
-          <Link
-            href="/dashboard/settings"
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all border ${
-              isActive("/dashboard/settings")
-                ? "bg-emerald-50 text-emerald-700 shadow-sm border-emerald-100/50"
-                : "text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 font-medium"
-            }`}
-          >
-            <Settings size={20} />
-            ตั้งค่าโปรไฟล์
-          </Link>
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/30">

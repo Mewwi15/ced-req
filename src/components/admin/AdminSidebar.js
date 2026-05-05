@@ -61,28 +61,6 @@ export default function AdminSidebar({
             <LayoutDashboard size={20} />
             จัดการคำร้อง
           </Link>
-          <Link
-            href="/admin/users"
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all border ${
-              isActive("/admin/users")
-                ? "bg-emerald-50 text-emerald-700 shadow-sm border-emerald-100/50"
-                : "text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 font-medium"
-            }`}
-          >
-            <Users size={20} />
-            จัดการผู้ใช้งาน
-          </Link>
-          <Link
-            href="/admin/settings"
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all border ${
-              isActive("/admin/settings")
-                ? "bg-emerald-50 text-emerald-700 shadow-sm border-emerald-100/50"
-                : "text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 font-medium"
-            }`}
-          >
-            <Settings size={20} />
-            ตั้งค่าระบบ
-          </Link>
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/30">

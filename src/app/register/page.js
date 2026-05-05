@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  sendEmailVerification, // 🌟 นำเข้าฟังก์ชันส่งอีเมลยืนยัน
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
@@ -17,6 +18,7 @@ import {
   Eye,
   EyeOff,
   Info,
+  MailCheck, // ไอคอนใหม่สำหรับแจ้งเตือนให้เช็คอีเมล
 } from "lucide-react";
 import Link from "next/link";
 
@@ -147,19 +149,36 @@ export default function RegisterPage() {
     strengthText = "รัดกุมมาก";
   }
 
-  // ─── ฟังก์ชันตรวจสอบและบันทึกข้อมูล (บันทึก Firestore) ───
+  // ─── 🌟 ฟังก์ชันสมัครสมาชิกแบบ Verify Email ───
   const handleRegister = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setInfoMsg("");
 
-    // ถ้าไม่ได้สมัครผ่าน Google ต้องเช็ครหัสผ่านด้วย
-    if (!isGoogleSignup && (!isPasswordSecure || !isPasswordMatch)) {
-      setError(
-        "กรุณาตั้งรหัสผ่านให้ครบ 8 ตัวอักษร (มีพิมพ์เล็ก, พิมพ์ใหญ่ และตัวเลข) และตรงกัน",
+    // ถ้าไม่ได้สมัครผ่าน Google ต้องเช็ครหัสผ่าน และดักโดเมน
+    if (!isGoogleSignup) {
+      if (!isPasswordSecure || !isPasswordMatch) {
+        setError(
+          "กรุณาตั้งรหัสผ่านให้ครบ 8 ตัวอักษร (มีพิมพ์เล็ก, พิมพ์ใหญ่ และตัวเลข) และตรงกัน",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // ตรวจสอบโดเมนสำหรับการพิมพ์กรอกเอง
+      const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
+      const isKmutnbEmail = allowedDomains.some((domain) =>
+        formData.email.endsWith(domain),
       );
-      setIsLoading(false);
-      return;
+
+      if (!isKmutnbEmail) {
+        setError(
+          "กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
+        );
+        setIsLoading(false);
+        return;
+      }
     }
 
     if (formData.studentId.length < 13) {
@@ -179,6 +198,9 @@ export default function RegisterPage() {
           formData.password,
         );
         finalUid = userCredential.user.uid;
+
+        // 🌟 สั่งให้ Firebase ส่งลิงก์ยืนยันตัวตนไปยังอีเมลที่กรอก
+        await sendEmailVerification(userCredential.user);
       }
 
       // บันทึกข้อมูลลง Firestore
@@ -193,10 +215,22 @@ export default function RegisterPage() {
         roles: [formData.role],
         createdAt: new Date(),
         pdpaConsent: true,
+        // เพิ่มฟิลด์ตรวจสอบว่ายืนยันอีเมลหรือยัง
+        emailVerified: isGoogleSignup ? true : false,
       });
 
       setSuccess(true);
-      setTimeout(() => router.push("/"), 1500);
+      setIsLoading(false);
+
+      if (!isGoogleSignup) {
+        // กรณีพิมพ์เอง ให้ขึ้นข้อความแจ้งเตือน แต่ไม่ Redirect เพื่อให้ผู้ใช้อ่าน
+        setInfoMsg(
+          "ระบบได้ส่งลิงก์ยืนยันไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบกล่องจดหมาย (Inbox/Junk) และกดลิงก์ยืนยันก่อนเข้าสู่ระบบครับ",
+        );
+      } else {
+        // กรณี Google ถือว่ายืนยันแล้ว Redirect ไปหน้าหลักได้เลย
+        setTimeout(() => router.push("/"), 1500);
+      }
     } catch (err) {
       setError(
         err.code === "auth/email-already-in-use"
@@ -214,20 +248,17 @@ export default function RegisterPage() {
     setInfoMsg("");
     try {
       const provider = new GoogleAuthProvider();
-      // บังคับให้ผู้ใช้เลือกบัญชี (เผื่อมีล็อกอินค้างไว้หลายอัน)
       provider.setCustomParameters({ prompt: "select_account" });
 
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // 🌟 ทริคตรวจสอบโดเมนอีเมลของ มจพ.
       const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
       const isKmutnbEmail = allowedDomains.some((domain) =>
         user.email.endsWith(domain),
       );
 
       if (!isKmutnbEmail) {
-        // ถ้าไม่ใช่อีเมลมหาลัย บังคับเตะออกทันที
         await auth.signOut();
         setError(
           "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
@@ -236,16 +267,13 @@ export default function RegisterPage() {
         return;
       }
 
-      // ตรวจสอบใน Firestore ก่อนว่ามีบัญชีนี้หรือยัง
       const userDocRef = doc(db, "users", user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (userDoc.exists()) {
-        // มีบัญชีแล้ว -> เข้าหน้าหลักได้เลย
         setSuccess(true);
         setTimeout(() => router.push("/"), 1500);
       } else {
-        // เด็กใหม่ -> เอา Email แปะในฟอร์ม ให้กรอกข้อมูลต่อ
         setFormData((prev) => ({ ...prev, email: user.email }));
         setGoogleUid(user.uid);
         setIsGoogleSignup(true);
@@ -260,6 +288,35 @@ export default function RegisterPage() {
       setIsLoading(false);
     }
   };
+
+  // หากผู้ใช้สมัครแบบฟอร์มปกติเสร็จแล้ว ให้แสดงหน้าความสำเร็จแบบนี้แทน
+  if (success && !isGoogleSignup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4">
+        <div className="bg-white p-10 sm:p-12 rounded-3xl shadow-sm border border-slate-100 w-full max-w-[500px] text-center">
+          <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <MailCheck size={40} strokeWidth={2} />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight mb-3">
+            ส่งอีเมลยืนยันตัวตนแล้ว!
+          </h2>
+          <p className="text-slate-500 font-medium leading-relaxed mb-8">
+            ระบบได้ส่งลิงก์สำหรับยืนยันบัญชีไปที่ <br />
+            <span className="text-blue-600 font-bold">{formData.email}</span>
+            <br />
+            กรุณาตรวจสอบกล่องจดหมาย หรือ Junk Mail
+            แล้วกดลิงก์เพื่อเปิดใช้งานบัญชี
+          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 transition-all"
+          >
+            กลับสู่หน้าเข้าสู่ระบบ
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4 sm:p-6 py-10">
@@ -304,7 +361,7 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {success && (
+        {success && isGoogleSignup && (
           <div className="mb-6 p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2.5">
             <CheckCircle2 className="text-emerald-500 shrink-0" size={18} />
             <p className="text-emerald-700 text-sm font-medium">
@@ -382,7 +439,6 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          {/* 📍 ช่องอีเมลจะโดนล็อก ถ้ามาจากการกดปุ่ม Google */}
           <InputField
             label="อีเมล (Email)"
             name="email"
@@ -394,7 +450,6 @@ export default function RegisterPage() {
             disabled={isLoading || success || isGoogleSignup}
           />
 
-          {/* 📍 ซ่อนช่องรหัสผ่าน ถ้ายืนยันผ่าน Google แล้ว */}
           {!isGoogleSignup && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -469,7 +524,6 @@ export default function RegisterPage() {
           </button>
         </form>
 
-        {/* 📍 ซ่อนปุ่ม Google Login ถ้าเชื่อมต่อ Google ไปแล้ว */}
         {!isGoogleSignup && (
           <>
             <div className="relative flex items-center py-4 mt-2">

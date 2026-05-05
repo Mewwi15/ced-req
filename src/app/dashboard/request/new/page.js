@@ -29,22 +29,23 @@ import {
 import Stepper from "@/components/Stepper";
 
 // ─── 📍 ฐานข้อมูลรายชื่ออาจารย์ในภาควิชา ───
+// ─── 📍 ฐานข้อมูลรายชื่ออาจารย์ในภาควิชา (ใช้คำนำหน้าแบบย่อ) ───
 const ADVISOR_LIST = [
-  "ผู้ช่วยศาสตราจารย์ ดร. ธัญญรัตน์ น้อมพลกรัง",
-  "อาจารย์ ดร. พุทธิดา สกุลวิริยกิจกุล",
-  "ผู้ช่วยศาสตราจารย์ ดร. จิรพันธุ์ ศรีสมพันธุ์",
-  "อาจารย์ ดร. วิทวัส ทิพย์สุวรรณ",
-  "อาจารย์ ดร. สมคิด แซ่หลี",
-  "ผู้ช่วยศาสตราจารย์ ดร. สรเดช ครุฑจ้อน",
-  "ผู้ช่วยศาสตราจารย์ ดร. จรัญ แสนราช",
-  "ผู้ช่วยศาสตราจารย์ ดร. วรรณชัย วรรณสวัสดิ์",
-  "ผู้ช่วยศาสตราจารย์ ดร. กฤช สินธนะกุล",
-  "ผู้ช่วยศาสตราจารย์ ดร. สุธิดา ชัยชมชื่น",
-  "ผู้ช่วยศาสตราจารย์ ดร. วาทินี นุ้ยเพียร",
-  "ผู้ช่วยศาสตราจารย์ ดร. เทวา คำปาเชื้อ",
-  "ผู้ช่วยศาสตราจารย์ ดร.ดวงกมล โพธิ์นาค",
-  "อาจารย์ ดร. ธีราทร สมิทธิวาณิช",
-  "อาจารย์ พนเมษ ญาณฐิติรัตน์",
+  "ผศ.ดร. ธัญญรัตน์ น้อมพลกรัง",
+  "ดร. พุทธิดา สกุลวิริยกิจกุล",
+  "ผศ.ดร. จิรพันธุ์ ศรีสมพันธุ์",
+  "ดร. วิทวัส ทิพย์สุวรรณ",
+  "ดร. สมคิด แซ่หลี",
+  "ผศ.ดร. สรเดช ครุฑจ้อน",
+  "ผศ.ดร. จรัญ แสนราช",
+  "ผศ.ดร. วรรณชัย วรรณสวัสดิ์",
+  "ผศ.ดร. กฤช สินธนะกุล",
+  "ผศ.ดร. สุธิดา ชัยชมชื่น",
+  "ผศ.ดร. วาทินี นุ้ยเพียร",
+  "ผศ.ดร. เทวา คำปาเชื้อ",
+  "ผศ.ดร. ดวงกมล โพธิ์นาค",
+  "ดร. ธีราทร สมิทธิวาณิช",
+  "อ. พนเมษ ญาณฐิติรัตน์",
 ];
 
 // ─── 🧩 Reusable Input Component ───
@@ -1291,6 +1292,7 @@ export default function NewRequestPage() {
       </div>
 
       {/* ─── 📍 MODAL ค้นหาและเลือกอาจารย์ที่ปรึกษา ─── */}
+      {/* ─── 📍 MODAL ค้นหาและเลือกอาจารย์ที่ปรึกษา ─── */}
       {isAdvisorModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden">
@@ -1323,37 +1325,63 @@ export default function NewRequestPage() {
 
             <div className="p-4 overflow-y-auto flex-1 custom-scrollbar space-y-2 bg-slate-50/30">
               {filteredAdvisorOptions.length > 0 ? (
-                filteredAdvisorOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      updateAdvisor(
-                        currentEditingAdvisor,
-                        "selection",
-                        opt.value,
-                      );
-                      setIsAdvisorModalOpen(false);
-                    }}
-                    className={`w-full text-left px-5 py-4 rounded-xl transition-all font-medium flex items-center justify-between group ${
-                      formData.academicWork.advisors[currentEditingAdvisor]
-                        ?.selection === opt.value
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm"
-                        : "bg-white text-slate-700 border border-slate-200 shadow-sm hover:border-emerald-300 hover:shadow-md"
-                    }`}
-                  >
-                    <span className="line-clamp-1 pr-4">{opt.label}</span>
-                    {formData.academicWork.advisors[currentEditingAdvisor]
-                      ?.selection === opt.value ? (
-                      <Check
-                        size={20}
-                        strokeWidth={3}
-                        className="text-emerald-600 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full border-2 border-slate-200 group-hover:border-emerald-300 shrink-0"></div>
-                    )}
-                  </button>
-                ))
+                filteredAdvisorOptions.map((opt) => {
+                  // เช็คว่าตัวเลือกนี้คืออันที่ช่องปัจจุบันเลือกไว้หรือไม่
+                  const isCurrentlySelectedByMe =
+                    formData.academicWork.advisors[currentEditingAdvisor]
+                      ?.selection === opt.value;
+
+                  // ดึงรายชื่ออาจารย์ที่ถูกเลือกไปแล้วทั้งหมด (ยกเว้นตัวเลือก "อื่นๆ")
+                  const allSelectedAdvisors = formData.academicWork.advisors
+                    .map((a) => a.selection)
+                    .filter((name) => name && name !== "อื่นๆ");
+
+                  // เช็คว่าตัวเลือกนี้ถูกเลือกโดยช่องอื่นไปแล้วหรือยัง
+                  const isAlreadySelectedByOther =
+                    !isCurrentlySelectedByMe &&
+                    opt.value !== "อื่นๆ" &&
+                    allSelectedAdvisors.includes(opt.value);
+
+                  return (
+                    <button
+                      key={opt.value}
+                      disabled={isAlreadySelectedByOther}
+                      onClick={() => {
+                        if (!isAlreadySelectedByOther) {
+                          updateAdvisor(
+                            currentEditingAdvisor,
+                            "selection",
+                            opt.value,
+                          );
+                          setIsAdvisorModalOpen(false);
+                        }
+                      }}
+                      className={`w-full text-left px-5 py-4 rounded-xl transition-all font-medium flex items-center justify-between group ${
+                        isCurrentlySelectedByMe
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm"
+                          : isAlreadySelectedByOther
+                            ? "bg-slate-50 text-slate-400 border border-slate-100 cursor-not-allowed opacity-60"
+                            : "bg-white text-slate-700 border border-slate-200 shadow-sm hover:border-emerald-300 hover:shadow-md"
+                      }`}
+                    >
+                      <span className="line-clamp-1 pr-4">
+                        {opt.label}
+                        {isAlreadySelectedByOther && " (เลือกแล้ว)"}
+                      </span>
+                      {isCurrentlySelectedByMe ? (
+                        <Check
+                          size={20}
+                          strokeWidth={3}
+                          className="text-emerald-600 shrink-0"
+                        />
+                      ) : isAlreadySelectedByOther ? (
+                        <User size={18} className="text-slate-300 shrink-0" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border-2 border-slate-200 group-hover:border-emerald-300 shrink-0"></div>
+                      )}
+                    </button>
+                  );
+                })
               ) : (
                 <div className="text-center py-10 text-slate-400">
                   <FileText size={40} className="mx-auto mb-3 opacity-20" />
