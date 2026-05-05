@@ -117,6 +117,8 @@ export default function RequestModal({ request, onClose, setRequests }) {
       // ดึงตัวแปร degree มาไว้เช็คคำ
       const degreeStr = data.studentInfo?.degree || "";
 
+      console.log("🔍 ข้อมูลผู้เชี่ยวชาญเนื้อหาคนที่ 1:", cExp[0]);
+
       docx.render({
         // --- 🟢 ข้อมูลเดิม (สำหรับฟอร์มบันทึกข้อความและคำร้องทั่วไป) ---
         docNumber: docNumber || "อว ๐๖๐๑.๑๒/",
@@ -222,24 +224,24 @@ export default function RequestModal({ request, onClose, setRequests }) {
 
         // รายชื่อผู้เชี่ยวชาญด้านเนื้อหา (หน้า 2)
         cName1: val(cExp[0]?.name),
-        cEdu1: val(cExp[0]?.education),
+        cEdu1: val(cExp[0]?.degree),
         cWork1: val(cExp[0]?.workplace),
         cName2: val(cExp[1]?.name),
-        cEdu2: val(cExp[1]?.education),
+        cEdu2: val(cExp[1]?.degree),
         cWork2: val(cExp[1]?.workplace),
         cName3: val(cExp[2]?.name),
-        cEdu3: val(cExp[2]?.education),
+        cEdu3: val(cExp[2]?.degree),
         cWork3: val(cExp[2]?.workplace),
 
         // รายชื่อผู้เชี่ยวชาญด้านเทคนิค (หน้า 2)
         tName1: val(tExp[0]?.name),
-        tEdu1: val(tExp[0]?.education),
+        tEdu1: val(tExp[0]?.degree),
         tWork1: val(tExp[0]?.workplace),
         tName2: val(tExp[1]?.name),
-        tEdu2: val(tExp[1]?.education),
+        tEdu2: val(tExp[1]?.degree),
         tWork2: val(tExp[1]?.workplace),
         tName3: val(tExp[2]?.name),
-        tEdu3: val(tExp[2]?.education),
+        tEdu3: val(tExp[2]?.degree),
         tWork3: val(tExp[2]?.workplace),
       });
 
