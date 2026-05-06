@@ -274,8 +274,10 @@ export default function DashboardOverviewPage() {
       <div className="pt-2 animate-in slide-in-from-bottom-8 duration-700 delay-200">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <a
-            href="#"
-            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all flex items-center gap-4"
+            href="/reqform/templates/user-manual.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all flex items-center gap-4 group"
           >
             <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
               <HelpCircle size={22} strokeWidth={2.5} />
@@ -286,23 +288,6 @@ export default function DashboardOverviewPage() {
               </h3>
               <p className="text-xs font-medium text-slate-500">
                 ขั้นตอนการยื่นคำร้อง
-              </p>
-            </div>
-          </a>
-
-          <a
-            href="#"
-            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:border-purple-200 hover:shadow-md transition-all flex items-center gap-4"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-              <Download size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-800 text-sm">
-                เอกสารดาวน์โหลด
-              </h3>
-              <p className="text-xs font-medium text-slate-500">
-                แบบฟอร์มอื่นๆ
               </p>
             </div>
           </a>
