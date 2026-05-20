@@ -6,18 +6,70 @@ import {
   X,
   FileText,
   Download,
-  Printer,
   ChevronDown,
   CheckCircle2,
   Clock,
   Search as SearchIcon,
   XCircle,
+  User,
+  Phone,
+  GraduationCap,
+  BookOpen,
+  Briefcase,
+  Layers,
 } from "lucide-react";
-import { useReactToPrint } from "react-to-print";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { saveAs } from "file-saver";
 
+// ─── 🎨 Helper 1: แปลงตัวย่อเป็นคำเต็ม ───
+const expandPrefix = (name) => {
+  if (!name) return "-";
+  let newName = String(name).trim();
+  newName = newName.replace(/ผศ\./g, "ผู้ช่วยศาสตราจารย์ ");
+  newName = newName.replace(/รศ\./g, "รองศาสตราจารย์ ");
+  newName = newName.replace(/ศ\./g, "ศาสตราจารย์ ");
+  return newName;
+};
+
+// ─── 🎨 Helper 2: บวกเลขที่เอกสาร +1 (รองรับเลขไทย/อารบิก) ───
+const incrementDocNum = (baseDoc, index) => {
+  if (!baseDoc) return "";
+
+  const thaiDigits = ["๐", "๑", "๒", "๓", "๔", "๕", "๖", "๗", "๘", "๙"];
+  const hasThai = /[๐-๙]/.test(baseDoc);
+
+  let arabicDoc = baseDoc.replace(/[๐-๙]/g, (match) =>
+    thaiDigits.indexOf(match),
+  );
+  const slashIndex = arabicDoc.lastIndexOf("/");
+
+  if (slashIndex !== -1) {
+    const prefix = arabicDoc.substring(0, slashIndex + 1);
+    const suffix = arabicDoc.substring(slashIndex + 1).trim();
+
+    if (suffix === "") {
+      const calculatedNum = 1 + index;
+      const result = `${prefix}${calculatedNum}`;
+      return hasThai ? result.replace(/\d/g, (m) => thaiDigits[m]) : result;
+    } else {
+      const match = suffix.match(/^(\d+)/);
+      if (match) {
+        const baseNumber = parseInt(match[1], 10);
+        const calculatedNum = baseNumber + index;
+        const rest = suffix.substring(match[1].length);
+        const result = `${prefix}${calculatedNum}${rest}`;
+        return hasThai ? result.replace(/\d/g, (m) => thaiDigits[m]) : result;
+      }
+    }
+  }
+
+  const calculatedNum = 1 + index;
+  const result = `${arabicDoc}/${calculatedNum}`;
+  return hasThai ? result.replace(/\d/g, (m) => thaiDigits[m]) : result;
+};
+
+// ─── 🎨 Helper 3: ไอคอนสถานะ ───
 const StatusIcon = ({ status }) => {
   if (status === "อนุมัติแล้ว")
     return <CheckCircle2 size={18} className="text-emerald-500" />;
@@ -26,7 +78,7 @@ const StatusIcon = ({ status }) => {
   if (status === "กำลังตรวจสอบ")
     return <SearchIcon size={18} className="text-blue-500" />;
   if (status === "ถูกปฏิเสธ")
-    return <XCircle size={18} className="text-red-500" />;
+    return <XCircle size={18} className="text-rose-500" />;
   return null;
 };
 
@@ -34,8 +86,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
   const [docNumber, setDocNumber] = useState("อว ๐๖๐๑.๑๒/");
   const [currentStatus, setCurrentStatus] = useState(request.status);
   const [isUpdating, setIsUpdating] = useState(false);
-
-  // ✅ แก้ไขให้ตรงกับเวอร์ชันใหม่ของ react-to-print
   const contentRef = useRef(null);
 
   const handleStatusChange = async (newStatus) => {
@@ -58,11 +108,7 @@ export default function RequestModal({ request, onClose, setRequests }) {
   const generateDocument = async (templateFileName, outputName, data) => {
     try {
       const response = await fetch(`/reqform/templates/${templateFileName}`);
-      if (!response.ok) {
-        throw new Error(
-          `ไม่พบไฟล์ ${templateFileName} ในระบบ (HTTP ${response.status})`,
-        );
-      }
+      if (!response.ok) throw new Error(`ไม่พบไฟล์ ${templateFileName} ในระบบ`);
 
       const content = await response.arrayBuffer();
       const zip = new PizZip(content);
@@ -81,25 +127,26 @@ export default function RequestModal({ request, onClose, setRequests }) {
         year: "numeric",
       });
 
-      // ดึงผู้เชี่ยวชาญจาก Firebase โดยตรง
       const contentExperts = (data.experts?.content || []).filter(
-        (e) => e.name?.trim() !== "",
+        (e) => e && e.name && e.name.trim() !== "",
       );
       const technicalExperts = (data.experts?.technical || []).filter(
-        (e) => e.name?.trim() !== "",
+        (e) => e && e.name && e.name.trim() !== "",
       );
+
       const allExpertsCombined = [
         ...contentExperts.map((e) => ({
           expertName: e.name,
+          expertWork: e.workplace,
           expertType: "ด้านเนื้อหา",
         })),
         ...technicalExperts.map((e) => ({
           expertName: e.name,
+          expertWork: e.workplace,
           expertType: "ด้านเทคนิค",
         })),
       ];
 
-      // 🌟 ชุดตัวแปรใหม่สำหรับฟอร์ม "ขอเก็บข้อมูล/ผู้เชี่ยวชาญ"
       const val = (value) =>
         value && value.toString().trim() !== "" ? value : "-";
       const checked = "✓";
@@ -113,15 +160,19 @@ export default function RequestModal({ request, onClose, setRequests }) {
       const cExp = data.experts?.content || [];
       const tExp = data.experts?.technical || [];
       const advs = data.academicWork?.advisors || [];
-
-      // ดึงตัวแปร degree มาไว้เช็คคำ
       const degreeStr = data.studentInfo?.degree || "";
 
-      console.log("🔍 ข้อมูลผู้เชี่ยวชาญเนื้อหาคนที่ 1:", cExp[0]);
+      // 🌟 สร้าง Array ใหม่สำหรับผู้เชี่ยวชาญ อิงตามแท็ก {#experts} ของคุณ
+      const expertsData = allExpertsCombined.map((exp, index) => {
+        return {
+          docNumber: incrementDocNum(docNumber || "อว ๐๖๐๑.๑๒/", index), // วนลูปบวกเลขที่ตรงนี้
+          expertName: expandPrefix(exp.expertName), // วนลูปแปลคำนำหน้าตรงนี้
+          expertType: exp.expertType,
+        };
+      });
 
       docx.render({
-        // --- 🟢 ข้อมูลเดิม (สำหรับฟอร์มบันทึกข้อความและคำร้องทั่วไป) ---
-        docNumber: docNumber || "อว ๐๖๐๑.๑๒/",
+        // 🟢 ตัวแปรทั่วไป (ระบบจะดึงไปใช้ทั้งข้างนอกและข้างในลูปได้เลย)
         dateStr: thaiDateFormatter.format(requestDate),
         prefix: data.studentInfo?.prefix || "",
         fullName: data.studentInfo?.fullName || "",
@@ -136,32 +187,23 @@ export default function RequestModal({ request, onClose, setRequests }) {
         workTitle: data.academicWork?.workTitle || "",
         workType: data.academicWork?.workType || "",
         mainAdvisor:
-          data.academicWork?.advisors?.find((a) => a.trim() !== "") || "",
+          data.academicWork?.advisors?.find((a) => a && a.trim() !== "") || "",
         advisors: (data.academicWork?.advisors || [])
-          .filter((n) => n.trim() !== "")
+          .filter((n) => n && n.trim() !== "")
           .map((n) => ({ name: n })),
-        experts: allExpertsCombined,
-        allExperts: allExpertsCombined.map((e, i) => ({
-          index: i + 1,
-          expertName: e.expertName,
-        })),
 
-        // --- 🌟 ข้อมูลใหม่ (สำหรับฟอร์มขอเก็บข้อมูล/แต่งตั้งผู้เชี่ยวชาญ) ---
         docDate: docDate,
         docMonth: docMonth,
         docYear: docYear,
-
-        signName: val(data.studentInfo?.fullName), // ชื่อสำหรับช่องเซ็น (ไม่มีคำนำหน้า)
+        signName: val(data.studentInfo?.fullName),
         fullSignName: val(
           `${data.studentInfo?.prefix || ""}${data.studentInfo?.fullName || ""}`,
-        ), // ชื่อเต็มในวงเล็บ
-
+        ),
         branch: val(data.studentInfo?.department),
         address: val(data.studentInfo?.address),
         phoneWork: val(data.studentInfo?.phoneWork),
         phoneHome: val(data.studentInfo?.phoneHome),
 
-        // Checkbox: เรื่อง
         reqTypeCollect: (data.requestDetails?.purpose || "").includes(
           "เก็บรวบรวม",
         )
@@ -172,8 +214,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
         )
           ? checked
           : unchecked,
-
-        // Checkbox: สิ่งที่ส่งมาด้วย
         attQ: data.requestDetails?.questionnaireCount > 0 ? checked : unchecked,
         attQNum: val(data.requestDetails?.questionnaireCount),
         attEval: data.requestDetails?.evaluationCount > 0 ? checked : unchecked,
@@ -186,7 +226,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
             ? val(data.requestDetails?.purposeOther)
             : "-",
 
-        // 🌟 Checkbox: ระดับการศึกษา (รองรับทั้งชื่อย่อและชื่อเต็ม)
         degMaster:
           degreeStr.includes("โท") || degreeStr.includes("มหาบัณฑิต")
             ? checked
@@ -195,8 +234,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
           degreeStr.includes("เอก") || degreeStr.includes("ดุษฎีบัณฑิต")
             ? checked
             : unchecked,
-
-        // Checkbox: ขณะนี้กำลังทำ
         workTypeThesis: (data.academicWork?.workType || "").includes(
           "วิทยานิพนธ์",
         )
@@ -205,8 +242,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
         workTypeIS: (data.academicWork?.workType || "").includes("อิสระ")
           ? checked
           : unchecked,
-
-        // Checkbox: มีความประสงค์
         objCollect: (data.requestDetails?.purpose || "").includes("เก็บรวบรวม")
           ? checked
           : unchecked,
@@ -216,13 +251,10 @@ export default function RequestModal({ request, onClose, setRequests }) {
         objOther:
           data.requestDetails?.purpose === "อื่นๆ" ? checked : unchecked,
 
-        // รายชื่อกรรมการที่ปรึกษา
         adv1: val(advs[0]),
         adv2: val(advs[1]),
         adv3: val(advs[2]),
         adv4: val(advs[3]),
-
-        // รายชื่อผู้เชี่ยวชาญด้านเนื้อหา (หน้า 2)
         cName1: val(cExp[0]?.name),
         cEdu1: val(cExp[0]?.degree),
         cWork1: val(cExp[0]?.workplace),
@@ -232,8 +264,6 @@ export default function RequestModal({ request, onClose, setRequests }) {
         cName3: val(cExp[2]?.name),
         cEdu3: val(cExp[2]?.degree),
         cWork3: val(cExp[2]?.workplace),
-
-        // รายชื่อผู้เชี่ยวชาญด้านเทคนิค (หน้า 2)
         tName1: val(tExp[0]?.name),
         tEdu1: val(tExp[0]?.degree),
         tWork1: val(tExp[0]?.workplace),
@@ -243,18 +273,22 @@ export default function RequestModal({ request, onClose, setRequests }) {
         tName3: val(tExp[2]?.name),
         tEdu3: val(tExp[2]?.degree),
         tWork3: val(tExp[2]?.workplace),
+
+        // 🌟 ส่ง Array ชุดใหม่เข้าไปในแท็ก {#experts} ตามแบบฟอร์มของคุณ
+        experts: expertsData,
+        // (ยังคงเก็บ docNumber ไว้นอกลูปเผื่อมีฟอร์มอื่นที่ไม่ได้ใช้ {#experts} จะได้ไม่พัง)
+        docNumber: docNumber || "อว ๐๖๐๑.๑๒/",
       });
 
       const out = docx.getZip().generate({ type: "arraybuffer" });
       const blob = new Blob([out], {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
-      saveAs(blob, `${outputName}_${data.studentInfo?.fullName}.docx`);
+
+      const studentName = data.studentInfo?.fullName || "ไม่ระบุชื่อ";
+      saveAs(blob, `${outputName}_${studentName}.docx`);
     } catch (error) {
-      console.error("Error generating document:", error);
-      alert(
-        `เกิดข้อผิดพลาดในการโหลดไฟล์ ${templateFileName}\n${error.message}`,
-      );
+      alert(`เกิดข้อผิดพลาดในการโหลดไฟล์\n${error.message}`);
     }
   };
 
@@ -279,256 +313,305 @@ export default function RequestModal({ request, onClose, setRequests }) {
     ) {
       generateDocument("template-expert-bachelor.docx", "คำร้อง_", request);
     } else {
-      alert(
-        `ไม่สามารถระบุระดับการศึกษาจากคำว่า "${degree}" ได้ กรุณาตรวจสอบข้อมูลนักศึกษา`,
-      );
+      alert(`ไม่สามารถระบุระดับการศึกษาจากคำว่า "${degree}" ได้`);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden ring-1 ring-slate-900/5">
-        {/* ─── Header ─── */}
-        <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-xl z-10 sticky top-0">
-          <div>
-            <h3 className="text-xl font-black text-slate-800 tracking-tight">
-              รายละเอียดคำร้อง
-            </h3>
-            <p className="text-sm font-medium text-slate-500 mt-1">
-              ตรวจสอบและดำเนินการเอกสารของนักศึกษา
-            </p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-[1100px] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden ring-1 ring-slate-900/5 max-h-[95dvh]">
+        {/* Header */}
+        <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center">
+              <Layers size={24} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                รายละเอียดคำร้อง
+              </h3>
+              <p className="text-sm font-medium text-slate-500 mt-0.5 font-mono uppercase tracking-wider">
+                REF: {request.id.substring(0, 8)}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2.5 bg-slate-50 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-all duration-200"
+            className="p-3 bg-slate-50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-all active:scale-95"
           >
-            <X size={20} strokeWidth={2.5} />
+            <X size={24} strokeWidth={2.5} />
           </button>
         </div>
 
-        {/* ─── Body ─── */}
-        <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
-          {/* ✅ เปลี่ยนชื่อ ref ตรงนี้ให้ตรงกับด้านบน */}
-          <div
-            ref={contentRef}
-            className="p-10 bg-white font-['TH_Sarabun_New'] text-black hidden print:block"
-          >
-            {/* โค้ด Print ซ่อนไว้ */}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            {/* ─── ซ้าย: ข้อมูลนักศึกษา ─── */}
-            <div className="lg:col-span-3 space-y-8">
-              <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
+        {/* Body Content */}
+        <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-slate-50/50">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+            {/* ฝั่งซ้าย: ข้อมูลคำร้อง */}
+            <div className="xl:col-span-7 space-y-6">
+              <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+                <div className="flex items-start gap-5">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-50 text-indigo-600 flex items-center justify-center font-black text-2xl shadow-sm shrink-0">
                     {request.studentInfo?.firstNameTH?.charAt(0) || "น"}
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-black text-indigo-400 uppercase tracking-widest">
-                      ผู้ยื่นคำร้อง
-                    </h4>
-                    <p className="text-lg font-bold text-slate-800">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-1">
+                      ข้อมูลนักศึกษา
+                    </p>
+                    <h4 className="text-2xl font-black text-slate-800 truncate">
                       {request.studentInfo?.prefix}
                       {request.studentInfo?.fullName}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-                  <div>
-                    <p className="text-slate-400 font-medium mb-1">
-                      รหัสนักศึกษา
-                    </p>
-                    <p className="font-bold text-slate-700">
-                      {request.studentInfo?.studentId}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium mb-1">
-                      เบอร์โทรศัพท์
-                    </p>
-                    <p className="font-bold text-slate-700">
-                      {request.studentInfo?.phoneMobile || "-"}
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-slate-400 font-medium mb-1">
-                      ระดับการศึกษา
-                    </p>
-                    <p className="font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg inline-block border border-emerald-100/50">
-                      {request.studentInfo?.degree || "ไม่ได้ระบุ"}
-                    </p>
-                  </div>
-                </div>
-              </section>
+                    </h4>
 
-              <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">
-                  หัวข้อและรายละเอียดงาน
-                </h4>
-                <div className="space-y-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                          <User size={14} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">
+                            รหัสนักศึกษา
+                          </p>
+                          <p className="font-bold text-slate-700 text-sm font-mono">
+                            {request.studentInfo?.studentId}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                          <Phone size={14} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">
+                            เบอร์โทรศัพท์
+                          </p>
+                          <p className="font-bold text-slate-700 text-sm">
+                            {request.studentInfo?.phoneMobile || "-"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="col-span-1 sm:col-span-2 flex items-center gap-3 mt-2">
+                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500">
+                          <GraduationCap size={14} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-emerald-600/70 uppercase">
+                            ระดับการศึกษา
+                          </p>
+                          <p className="font-bold text-emerald-700 text-sm">
+                            {request.studentInfo?.degree || "ไม่ได้ระบุ"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">
+                    <BookOpen size={16} />
+                  </div>
+                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">
+                    หัวข้อและรายละเอียดงาน
+                  </h4>
+                </div>
+                <div className="space-y-5">
                   <div>
-                    <p className="text-slate-400 font-medium mb-1">
-                      เรื่องที่ขอ
-                    </p>
-                    <p className="font-bold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl inline-block border border-emerald-100/50">
+                    <span className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
+                      ความประสงค์ของคำร้อง
+                    </span>
+                    <span className="inline-flex font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100/50 text-sm">
                       ขอ
                       {request.requestDetails?.purpose === "อื่นๆ"
                         ? request.requestDetails?.purposeOther
                         : request.requestDetails?.purpose}
-                    </p>
+                    </span>
                   </div>
-                  <div className="pt-2">
-                    <p className="text-slate-400 font-medium mb-1">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
                       ชื่องานวิจัย / ปริญญานิพนธ์
-                    </p>
-                    <p className="font-bold text-slate-800 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-                      {request.academicWork?.workTitle}
+                    </span>
+                    <p className="font-bold text-slate-800 text-sm leading-relaxed">
+                      {request.academicWork?.workTitle || "-"}
                     </p>
                   </div>
                 </div>
-              </section>
+              </div>
 
-              {/* ─── แสดงรายชื่อผู้เชี่ยวชาญจาก Firebase ─── */}
+              {/* รายชื่อผู้เชี่ยวชาญ */}
               {(request.experts?.content?.length > 0 ||
                 request.experts?.technical?.length > 0) && (
-                <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">
-                    รายชื่อผู้เชี่ยวชาญ
-                  </h4>
-                  <div className="space-y-3 text-sm">
+                <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                      <Briefcase size={16} />
+                    </div>
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">
+                      รายชื่อผู้เชี่ยวชาญ
+                    </h4>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
                     {(request.experts?.content || [])
-                      .filter((e) => e.name)
+                      .filter((e) => e && e.name)
                       .map((e, i) => (
                         <div
                           key={i}
-                          className="flex items-center gap-3 bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-100"
+                          className="flex items-center gap-2 bg-blue-50/50 px-3 py-2 rounded-xl border border-blue-100/50 text-sm"
                         >
-                          <span className="text-[10px] font-black text-blue-500 bg-blue-100 px-2 py-0.5 rounded-md">
-                            เนื้อหา
-                          </span>
+                          <span className="w-2 h-2 rounded-full bg-blue-400"></span>
                           <span className="font-bold text-slate-700">
                             {e.name}
+                          </span>
+                          <span className="text-[10px] font-bold text-blue-500 ml-1">
+                            (เนื้อหา)
                           </span>
                         </div>
                       ))}
                     {(request.experts?.technical || [])
-                      .filter((e) => e.name)
+                      .filter((e) => e && e.name)
                       .map((e, i) => (
                         <div
                           key={i}
-                          className="flex items-center gap-3 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-100"
+                          className="flex items-center gap-2 bg-indigo-50/50 px-3 py-2 rounded-xl border border-indigo-100/50 text-sm"
                         >
-                          <span className="text-[10px] font-black text-indigo-500 bg-indigo-100 px-2 py-0.5 rounded-md">
-                            เทคนิค
-                          </span>
+                          <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
                           <span className="font-bold text-slate-700">
                             {e.name}
+                          </span>
+                          <span className="text-[10px] font-bold text-indigo-500 ml-1">
+                            (เทคนิค)
                           </span>
                         </div>
                       ))}
                   </div>
-                </section>
+                </div>
               )}
             </div>
 
-            {/* ─── ขวา: สำหรับเจ้าหน้าที่ ─── */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 h-full">
-                <div className="flex items-center gap-2.5 mb-6 pb-4 border-b border-slate-200">
-                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                    <FileText size={18} />
+            {/* ฝั่งขวา: โซนจัดการสำหรับ Admin */}
+            <div className="xl:col-span-5 flex flex-col gap-6">
+              <div className="bg-slate-900 rounded-[2rem] p-6 sm:p-8 shadow-xl text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+                <h4 className="font-black text-lg mb-6 flex items-center gap-2">
+                  <FileText className="text-emerald-400" size={20} /> ออกเอกสาร
+                  (Generate)
+                </h4>
+
+                <div className="space-y-3 relative z-10">
+                  <button
+                    onClick={() =>
+                      generateDocument(
+                        "template-memo.docx",
+                        "บันทึกข้อความ",
+                        request,
+                      )
+                    }
+                    className="w-full flex items-center justify-between px-5 py-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl font-bold transition-all group"
+                  >
+                    <span className="flex items-center gap-3">
+                      <FileText size={18} className="text-slate-300" />{" "}
+                      บันทึกข้อความ (ปะหน้า)
+                    </span>
+                    <Download
+                      size={18}
+                      className="text-emerald-400 group-hover:scale-110 transition-transform"
+                    />
+                  </button>
+
+                  <button
+                    onClick={handleDownloadDegreeForm}
+                    className="w-full flex items-center justify-between px-5 py-4 bg-emerald-500 hover:bg-emerald-600 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 group"
+                  >
+                    <span className="flex items-center gap-3">
+                      <FileText size={18} /> ฟอร์มคำร้องหลัก
+                    </span>
+                    <Download
+                      size={18}
+                      className="group-hover:translate-y-1 transition-transform"
+                    />
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      generateDocument(
+                        "template-data-collection.docx",
+                        "ขอเก็บข้อมูลและแต่งตั้งผู้เชี่ยวชาญ",
+                        request,
+                      )
+                    }
+                    className="w-full flex items-center justify-between px-5 py-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl font-bold transition-all group"
+                  >
+                    <span className="flex items-center gap-3 text-sm">
+                      <FileText size={18} className="text-purple-300" />{" "}
+                      ฟอร์มเก็บข้อมูล / ตั้งผู้เชี่ยวชาญ
+                    </span>
+                    <Download
+                      size={18}
+                      className="text-purple-400 group-hover:scale-110 transition-transform"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2rem] border border-slate-200 p-6 sm:p-8 shadow-sm flex-1">
+                <h4 className="font-black text-slate-800 text-lg mb-6">
+                  อัปเดตสถานะคำร้อง
+                </h4>
+
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      ใส่เลขที่เอกสาร
+                    </label>
+                    <input
+                      type="text"
+                      value={docNumber}
+                      onChange={(e) => setDocNumber(e.target.value)}
+                      placeholder="อว ๐๖๐๑.๑๒/"
+                      className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                    />
                   </div>
-                  <h4 className="font-black text-slate-800">
-                    สำหรับเจ้าหน้าที่
-                  </h4>
-                </div>
 
-                {/* เลขที่เอกสาร */}
-                <div className="space-y-2 mb-5">
-                  <label className="text-sm font-bold text-slate-700">
-                    เลขที่เอกสาร (ที่)
-                  </label>
-                  <input
-                    type="text"
-                    value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value)}
-                    placeholder="เช่น อว ๐๖๐๑.๑๒/๑๒๓๔"
-                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-blue-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm"
-                  />
-                </div>
-
-                {/* อัปเดตสถานะ */}
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    อัปเดตสถานะคำร้อง
-                    {isUpdating && (
-                      <span className="text-[10px] text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full animate-pulse">
-                        กำลังบันทึก...
-                      </span>
-                    )}
-                  </label>
-                  <div className="relative group">
-                    <select
-                      value={currentStatus}
-                      onChange={(e) => handleStatusChange(e.target.value)}
-                      disabled={isUpdating}
-                      className={`w-full appearance-none pl-11 pr-10 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all cursor-pointer shadow-sm disabled:opacity-50 ${
-                        currentStatus === "อนุมัติแล้ว"
-                          ? "text-emerald-700 border-emerald-200 bg-emerald-50/50"
-                          : currentStatus === "ถูกปฏิเสธ"
-                            ? "text-red-700 border-red-200 bg-red-50/50"
-                            : ""
-                      }`}
-                    >
-                      <option value="รอดำเนินการ">รอดำเนินการ</option>
-                      <option value="กำลังตรวจสอบ">กำลังตรวจสอบ</option>
-                      <option value="อนุมัติแล้ว">อนุมัติแล้ว</option>
-                      <option value="ถูกปฏิเสธ">ถูกปฏิเสธ</option>
-                    </select>
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <StatusIcon status={currentStatus} />
-                    </div>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown size={18} strokeWidth={2.5} />
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                      เลือกสถานะใหม่
+                      {isUpdating && (
+                        <span className="text-[10px] text-emerald-500 animate-pulse">
+                          กำลังบันทึก...
+                        </span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={currentStatus}
+                        onChange={(e) => handleStatusChange(e.target.value)}
+                        disabled={isUpdating}
+                        className={`w-full appearance-none pl-12 pr-10 py-4 border rounded-xl font-bold outline-none transition-all cursor-pointer shadow-sm disabled:opacity-50
+                          ${
+                            currentStatus === "อนุมัติแล้ว"
+                              ? "text-emerald-700 border-emerald-200 bg-emerald-50/50 focus:ring-emerald-500/20"
+                              : currentStatus === "ถูกปฏิเสธ"
+                                ? "text-rose-700 border-rose-200 bg-rose-50/50 focus:ring-rose-500/20"
+                                : "text-slate-700 border-slate-200 bg-white focus:border-blue-500 focus:ring-blue-500/20"
+                          }`}
+                      >
+                        <option value="รอดำเนินการ">รอดำเนินการ</option>
+                        <option value="กำลังตรวจสอบ">กำลังตรวจสอบ</option>
+                        <option value="อนุมัติแล้ว">อนุมัติแล้ว</option>
+                        <option value="ถูกปฏิเสธ">ถูกปฏิเสธ</option>
+                      </select>
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <StatusIcon status={currentStatus} />
+                      </div>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown size={18} strokeWidth={2.5} />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* ─── Footer ─── */}
-        <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 justify-between items-center z-10 rounded-b-[2rem]">
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            <button
-              onClick={() =>
-                generateDocument("template-memo.docx", "บันทึกข้อความ", request)
-              }
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-bold transition-all shadow-sm"
-            >
-              <Download size={18} /> บันทึกข้อความ
-            </button>
-            <button
-              onClick={handleDownloadDegreeForm}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-md active:scale-95"
-            >
-              <Download size={18} /> โหลดแบบฟอร์มคำร้อง
-            </button>
-            {/* 🌟 ปุ่มใหม่สำหรับโหลดฟอร์มเก็บข้อมูลและแต่งตั้งผู้เชี่ยวชาญ */}
-            <button
-              onClick={() =>
-                generateDocument(
-                  "template-data-collection.docx",
-                  "ขอเก็บข้อมูลและแต่งตั้งผู้เชี่ยวชาญ",
-                  request,
-                )
-              }
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-all shadow-md active:scale-95"
-            >
-              <Download size={18} /> ฟอร์มขอเก็บข้อมูลฯ
-            </button>
           </div>
         </div>
       </div>

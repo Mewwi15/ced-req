@@ -5,7 +5,7 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  sendEmailVerification, // 🌟 นำเข้าฟังก์ชันส่งอีเมลยืนยัน
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
@@ -18,7 +18,7 @@ import {
   Eye,
   EyeOff,
   Info,
-  MailCheck, // ไอคอนใหม่สำหรับแจ้งเตือนให้เช็คอีเมล
+  MailCheck,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -93,11 +93,16 @@ const SelectField = ({ label, options, ...props }) => {
 export default function RegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [infoMsg, setInfoMsg] = useState("");
-  const [success, setSuccess] = useState(false);
 
-  // 🌟 State สำหรับจัดการโหมด Google Signup
+  const [modal, setModal] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: "",
+    buttonText: "ตกลง",
+    onClose: null,
+  });
+
   const [isGoogleSignup, setIsGoogleSignup] = useState(false);
   const [googleUid, setGoogleUid] = useState(null);
 
@@ -110,24 +115,39 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "student",
   });
+
+  const showModal = (
+    type,
+    title,
+    message,
+    buttonText = "ตกลง",
+    onCloseCallback = null,
+  ) => {
+    setModal({
+      isOpen: true,
+      type,
+      title,
+      message,
+      buttonText,
+      onClose:
+        onCloseCallback ||
+        (() => setModal((prev) => ({ ...prev, isOpen: false }))),
+    });
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-    if (error) setError("");
   };
 
   const hasLength = formData.password.length >= 8;
   const hasUppercase = /[A-Z]/.test(formData.password);
   const hasLowercase = /[a-z]/.test(formData.password);
   const hasNumber = /[0-9]/.test(formData.password);
-
   const isPasswordSecure =
     hasLength && hasUppercase && hasLowercase && hasNumber;
   const isPasswordMatch =
     formData.password !== "" && formData.password === formData.confirmPassword;
-
   const strengthScore = [
     hasLength,
     hasUppercase,
@@ -149,31 +169,31 @@ export default function RegisterPage() {
     strengthText = "รัดกุมมาก";
   }
 
-  // ─── 🌟 ฟังก์ชันสมัครสมาชิกแบบ Verify Email ───
+  // ─── 🌟 ฟังก์ชันสมัครสมาชิกแบบปกติ ───
   const handleRegister = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
-    setInfoMsg("");
 
-    // ถ้าไม่ได้สมัครผ่าน Google ต้องเช็ครหัสผ่าน และดักโดเมน
     if (!isGoogleSignup) {
       if (!isPasswordSecure || !isPasswordMatch) {
-        setError(
+        showModal(
+          "error",
+          "ข้อมูลไม่ถูกต้อง",
           "กรุณาตั้งรหัสผ่านให้ครบ 8 ตัวอักษร (มีพิมพ์เล็ก, พิมพ์ใหญ่ และตัวเลข) และตรงกัน",
         );
         setIsLoading(false);
         return;
       }
 
-      // ตรวจสอบโดเมนสำหรับการพิมพ์กรอกเอง
       const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
       const isKmutnbEmail = allowedDomains.some((domain) =>
         formData.email.endsWith(domain),
       );
 
       if (!isKmutnbEmail) {
-        setError(
+        showModal(
+          "error",
+          "อีเมลไม่ถูกต้อง",
           "กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
         );
         setIsLoading(false);
@@ -182,70 +202,101 @@ export default function RegisterPage() {
     }
 
     if (formData.studentId.length < 13) {
-      setError("รหัสนักศึกษา/บุคลากรต้องครบ 13 หลัก");
+      showModal(
+        "error",
+        "ข้อมูลไม่ถูกต้อง",
+        "รหัสนักศึกษา/บุคลากรต้องครบ 13 หลัก",
+      );
       setIsLoading(false);
       return;
     }
 
     try {
-      let finalUid = googleUid;
-
-      // ถ้าเป็นการสมัครปกติ ให้สร้างบัญชีด้วย Email/Password
+      // ─── กรณี Email/Password signup ───
       if (!isGoogleSignup) {
         const userCredential = await createUserWithEmailAndPassword(
           auth,
           formData.email,
           formData.password,
         );
-        finalUid = userCredential.user.uid;
-
-        // 🌟 สั่งให้ Firebase ส่งลิงก์ยืนยันตัวตนไปยังอีเมลที่กรอก
         await sendEmailVerification(userCredential.user);
+
+        // 🌟 เซฟข้อมูลไว้ใน sessionStorage ชั่วคราว
+        //    ยัง "ไม่" setDoc ลง Firestore จนกว่าจะกด verify ในอีเมล
+        const emailPrefix = formData.email.split("@")[0];
+        const isStaffEmail =
+          formData.email.endsWith("@kmutnb.ac.th") &&
+          !emailPrefix.startsWith("s");
+
+        sessionStorage.setItem(
+          "pendingUser",
+          JSON.stringify({
+            uid: userCredential.user.uid,
+            email: formData.email,
+            prefix: formData.prefix,
+            firstNameTH: formData.firstNameTH,
+            lastNameTH: formData.lastNameTH,
+            studentId: formData.studentId,
+            phoneNumber: formData.phoneNumber,
+            roles: [isStaffEmail ? "staff" : "student"],
+          }),
+        );
+
+        setIsLoading(false);
+        router.push("/verify-email");
+        return;
       }
 
-      // บันทึกข้อมูลลง Firestore
-      await setDoc(doc(db, "users", finalUid), {
-        uid: finalUid,
+      // ─── กรณี Google signup: verified แล้ว → setDoc ได้เลย ───
+      const emailPrefix = formData.email.split("@")[0];
+      const isStaffEmail =
+        formData.email.endsWith("@kmutnb.ac.th") &&
+        !emailPrefix.startsWith("s");
+
+      await setDoc(doc(db, "users", googleUid), {
+        uid: googleUid,
         email: formData.email,
         prefix: formData.prefix,
         firstNameTH: formData.firstNameTH,
         lastNameTH: formData.lastNameTH,
         studentId: formData.studentId,
         phoneNumber: formData.phoneNumber,
-        roles: [formData.role],
+        roles: [isStaffEmail ? "staff" : "student"],
         createdAt: new Date(),
         pdpaConsent: true,
-        // เพิ่มฟิลด์ตรวจสอบว่ายืนยันอีเมลหรือยัง
-        emailVerified: isGoogleSignup ? true : false,
+        emailVerified: true,
       });
 
-      setSuccess(true);
       setIsLoading(false);
-
-      if (!isGoogleSignup) {
-        // กรณีพิมพ์เอง ให้ขึ้นข้อความแจ้งเตือน แต่ไม่ Redirect เพื่อให้ผู้ใช้อ่าน
-        setInfoMsg(
-          "ระบบได้ส่งลิงก์ยืนยันไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบกล่องจดหมาย (Inbox/Junk) และกดลิงก์ยืนยันก่อนเข้าสู่ระบบครับ",
+      showModal(
+        "success",
+        "ลงทะเบียนสำเร็จ!",
+        "บันทึกข้อมูลเข้าสู่ระบบเรียบร้อยแล้วครับ",
+        "เข้าสู่หน้าหลัก",
+        () => router.push("/"),
+      );
+    } catch (err) {
+      if (err.code === "auth/email-already-in-use") {
+        showModal(
+          "error",
+          "ลงทะเบียนไม่สำเร็จ",
+          "อีเมลนี้ซ้ำแล้ว กรุณาลองใหม่อีกครั้ง",
+          "ลองใหม่อีกครั้ง",
         );
       } else {
-        // กรณี Google ถือว่ายืนยันแล้ว Redirect ไปหน้าหลักได้เลย
-        setTimeout(() => router.push("/"), 1500);
+        showModal(
+          "error",
+          "เกิดข้อผิดพลาด",
+          "ไม่สามารถสร้างบัญชีได้ กรุณาตรวจสอบข้อมูลอีกครั้ง",
+        );
       }
-    } catch (err) {
-      setError(
-        err.code === "auth/email-already-in-use"
-          ? "อีเมลนี้ถูกลงทะเบียนในระบบเรียบร้อยแล้ว"
-          : "ไม่สามารถสร้างบัญชีได้ กรุณาตรวจสอบข้อมูลอีกครั้ง",
-      );
       setIsLoading(false);
     }
   };
 
-  // ─── ฟังก์ชันเชื่อมต่อ Google พร้อมเช็คโดเมนมหาลัย ───
+  // ─── 🌟 ฟังก์ชันเชื่อมต่อ Google ───
   const handleGoogleAuth = async () => {
     setIsLoading(true);
-    setError("");
-    setInfoMsg("");
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
@@ -260,7 +311,9 @@ export default function RegisterPage() {
 
       if (!isKmutnbEmail) {
         await auth.signOut();
-        setError(
+        showModal(
+          "error",
+          "โดเมนไม่ถูกต้อง",
           "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
         );
         setIsLoading(false);
@@ -271,285 +324,320 @@ export default function RegisterPage() {
       const userDoc = await getDoc(userDocRef);
 
       if (userDoc.exists()) {
-        setSuccess(true);
-        setTimeout(() => router.push("/"), 1500);
-      } else {
-        setFormData((prev) => ({ ...prev, email: user.email }));
-        setGoogleUid(user.uid);
-        setIsGoogleSignup(true);
-        setInfoMsg(
-          "ยืนยันอีเมลมหาวิทยาลัยสำเร็จ! กรุณากรอกชื่อ-สกุล และรหัสนักศึกษาให้ครบถ้วนเพื่อเสร็จสิ้นการลงทะเบียน",
+        await auth.signOut();
+        showModal(
+          "error",
+          "ลงทะเบียนไม่สำเร็จ",
+          "อีเมลนี้ซ้ำแล้ว กรุณาลองใหม่อีกครั้ง",
+          "ลองใหม่อีกครั้ง",
         );
         setIsLoading(false);
+        return;
       }
+
+      let autoStudentId = "";
+      const emailPrefix = user.email.split("@")[0];
+      if (emailPrefix.startsWith("s") && emailPrefix.length > 1) {
+        autoStudentId = emailPrefix.substring(1);
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        email: user.email,
+        studentId: autoStudentId,
+      }));
+      setGoogleUid(user.uid);
+      setIsGoogleSignup(true);
+
+      showModal(
+        "info",
+        "ยืนยันอีเมลสำเร็จ!",
+        "กรุณากรอกชื่อ-นามสกุล และเบอร์โทรศัพท์ให้ครบถ้วนเพื่อเสร็จสิ้นการลงทะเบียน",
+        "ดำเนินการต่อ",
+      );
+      setIsLoading(false);
     } catch (err) {
       console.error(err);
-      setError("เกิดข้อผิดพลาดในการลงทะเบียนด้วย Google หรือคุณกดยกเลิก");
+      showModal(
+        "error",
+        "เกิดข้อผิดพลาด",
+        "เกิดข้อผิดพลาดในการลงทะเบียนด้วย Google หรือคุณกดยกเลิกการทำงาน",
+      );
       setIsLoading(false);
     }
   };
 
-  // หากผู้ใช้สมัครแบบฟอร์มปกติเสร็จแล้ว ให้แสดงหน้าความสำเร็จแบบนี้แทน
-  if (success && !isGoogleSignup) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4">
-        <div className="bg-white p-10 sm:p-12 rounded-3xl shadow-sm border border-slate-100 w-full max-w-[500px] text-center">
-          <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <MailCheck size={40} strokeWidth={2} />
-          </div>
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight mb-3">
-            ส่งอีเมลยืนยันตัวตนแล้ว!
-          </h2>
-          <p className="text-slate-500 font-medium leading-relaxed mb-8">
-            ระบบได้ส่งลิงก์สำหรับยืนยันบัญชีไปที่ <br />
-            <span className="text-blue-600 font-bold">{formData.email}</span>
-            <br />
-            กรุณาตรวจสอบกล่องจดหมาย หรือ Junk Mail
-            แล้วกดลิงก์เพื่อเปิดใช้งานบัญชี
-          </p>
+  return (
+    <>
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-10px); }
+          40%, 80% { transform: translateX(10px); }
+        }
+        .animate-shake {
+          animation: shake 0.4s ease-in-out;
+        }
+      `}</style>
+
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4 sm:p-6 py-10 relative">
+        <div className="bg-white p-8 sm:p-12 rounded-3xl shadow-sm border border-slate-100 w-full max-w-[600px] relative">
           <Link
             href="/login"
-            className="inline-flex items-center justify-center w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 transition-all"
+            className="absolute left-6 top-6 sm:left-8 sm:top-8 flex items-center gap-1 text-sm font-bold text-slate-400 hover:text-slate-700 transition-colors"
           >
-            กลับสู่หน้าเข้าสู่ระบบ
+            <ChevronLeft size={16} /> กลับ
           </Link>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] font-sans p-4 sm:p-6 py-10">
-      <div className="bg-white p-8 sm:p-12 rounded-3xl shadow-sm border border-slate-100 w-full max-w-[600px] relative">
-        <Link
-          href="/login"
-          className="absolute left-6 top-6 sm:left-8 sm:top-8 flex items-center gap-1 text-sm font-bold text-slate-400 hover:text-slate-700 transition-colors"
-        >
-          <ChevronLeft size={16} /> กลับ
-        </Link>
-
-        <div className="flex flex-col items-center text-center mt-6 sm:mt-0 mb-8">
-          <img
-            src="https://ced.kmutnb.ac.th/image/banner/28997822520250908_111639.png"
-            alt="CED KMUTNB Logo"
-            className="h-14 w-auto object-contain mb-5"
-          />
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-            สร้างบัญชีใหม่
-          </h1>
-          <p className="text-sm font-medium text-slate-500 mt-1.5">
-            กรอกข้อมูลหรือใช้อีเมลมหาวิทยาลัยเพื่อลงทะเบียน
-          </p>
-        </div>
-
-        {/* 📍 แจ้งเตือนสถานะต่างๆ */}
-        {error && (
-          <div className="mb-6 p-3.5 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2.5">
-            <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
-            <p className="text-red-600 text-sm font-medium leading-relaxed">
-              {error}
+          <div className="flex flex-col items-center text-center mt-6 sm:mt-0 mb-8">
+            <img
+              src="https://ced.kmutnb.ac.th/image/banner/28997822520250908_111639.png"
+              alt="CED KMUTNB Logo"
+              className="h-14 w-auto object-contain mb-5"
+            />
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+              สร้างบัญชีใหม่
+            </h1>
+            <p className="text-sm font-medium text-slate-500 mt-1.5">
+              กรอกข้อมูลหรือใช้อีเมลมหาวิทยาลัยเพื่อลงทะเบียน
             </p>
           </div>
-        )}
 
-        {infoMsg && !success && !error && (
-          <div className="mb-6 p-3.5 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
-            <Info className="text-blue-500 shrink-0 mt-0.5" size={18} />
-            <p className="text-blue-700 text-sm font-medium leading-relaxed">
-              {infoMsg}
-            </p>
-          </div>
-        )}
-
-        {success && isGoogleSignup && (
-          <div className="mb-6 p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2.5">
-            <CheckCircle2 className="text-emerald-500 shrink-0" size={18} />
-            <p className="text-emerald-700 text-sm font-medium">
-              เข้าสู่ระบบสำเร็จ! กำลังพาท่านไปหน้าหลัก...
-            </p>
-          </div>
-        )}
-
-        <form onSubmit={handleRegister} className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-5">
-            <div className="sm:col-span-3">
-              <SelectField
-                label="คำนำหน้า"
-                name="prefix"
-                value={formData.prefix}
-                onChange={handleChange}
-                options={[
-                  { label: "นาย", value: "นาย" },
-                  { label: "นาง", value: "นาง" },
-                  { label: "นางสาว", value: "นางสาว" },
-                ]}
-                disabled={isLoading || success}
-              />
+          <form onSubmit={handleRegister} className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-5">
+              <div className="sm:col-span-3">
+                <SelectField
+                  label="คำนำหน้า"
+                  name="prefix"
+                  value={formData.prefix}
+                  onChange={handleChange}
+                  options={[
+                    { label: "นาย", value: "นาย" },
+                    { label: "นาง", value: "นาง" },
+                    { label: "นางสาว", value: "นางสาว" },
+                  ]}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <InputField
+                  label="ชื่อจริง (ภาษาไทย)"
+                  name="firstNameTH"
+                  placeholder="ชื่อ.."
+                  value={formData.firstNameTH}
+                  onChange={handleChange}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="sm:col-span-5">
+                <InputField
+                  label="นามสกุล (ภาษาไทย)"
+                  name="lastNameTH"
+                  placeholder="นามสกุล.."
+                  value={formData.lastNameTH}
+                  onChange={handleChange}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
             </div>
-            <div className="sm:col-span-4">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <InputField
-                label="ชื่อจริง (ภาษาไทย)"
-                name="firstNameTH"
-                placeholder="ชื่อ.."
-                value={formData.firstNameTH}
+                label="รหัสนักศึกษา / บุคลากร"
+                name="studentId"
+                maxLength="13"
+                placeholder="13 หลัก"
+                value={formData.studentId}
                 onChange={handleChange}
                 required
-                disabled={isLoading || success}
+                disabled={isLoading}
               />
-            </div>
-            <div className="sm:col-span-5">
               <InputField
-                label="นามสกุล (ภาษาไทย)"
-                name="lastNameTH"
-                placeholder="นามสกุล.."
-                value={formData.lastNameTH}
+                label="เบอร์โทรศัพท์"
+                name="phoneNumber"
+                type="tel"
+                placeholder="08X-XXX-XXXX"
+                value={formData.phoneNumber}
                 onChange={handleChange}
                 required
-                disabled={isLoading || success}
+                disabled={isLoading}
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="pt-2 border-t border-slate-100 mt-6 mb-4">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2">
+                ข้อมูลการเข้าสู่ระบบ
+              </p>
+            </div>
+
             <InputField
-              label="รหัสนักศึกษา / บุคลากร"
-              name="studentId"
-              maxLength="13"
-              placeholder="13 หลัก"
-              value={formData.studentId}
+              label="อีเมล (Email)"
+              name="email"
+              type="email"
+              placeholder="example@kmutnb.ac.th"
+              value={formData.email}
               onChange={handleChange}
               required
-              disabled={isLoading || success}
+              disabled={isLoading || isGoogleSignup}
             />
-            <InputField
-              label="เบอร์โทรศัพท์"
-              name="phoneNumber"
-              type="tel"
-              placeholder="08X-XXX-XXXX"
-              value={formData.phoneNumber}
-              onChange={handleChange}
-              required
-              disabled={isLoading || success}
-            />
-          </div>
 
-          <div className="pt-2 border-t border-slate-100 mt-6 mb-4">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2">
-              ข้อมูลการเข้าสู่ระบบ
-            </p>
-          </div>
+            {!isGoogleSignup && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <InputField
+                    label="รหัสผ่าน"
+                    name="password"
+                    isPassword
+                    placeholder="••••••••"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                  <InputField
+                    label="ยืนยันรหัสผ่าน"
+                    name="confirmPassword"
+                    isPassword
+                    placeholder="••••••••"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
 
-          <InputField
-            label="อีเมล (Email)"
-            name="email"
-            type="email"
-            placeholder="example@kmutnb.ac.th"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            disabled={isLoading || success || isGoogleSignup}
-          />
+                {formData.password && (
+                  <div className="space-y-1.5 mt-2 px-1">
+                    <div className="flex justify-between items-center text-[11px] font-bold">
+                      <span className="text-slate-500">
+                        ความปลอดภัยรหัสผ่าน
+                      </span>
+                      <span
+                        className={
+                          strengthScore === 4
+                            ? "text-emerald-600"
+                            : "text-slate-500"
+                        }
+                      >
+                        {strengthText}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${strengthColor}`}
+                        style={{ width: `${strengthPercentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <button
+              type="submit"
+              disabled={
+                isLoading ||
+                (!isGoogleSignup && (!isPasswordSecure || !isPasswordMatch))
+              }
+              className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  <span>กำลังดำเนินการ...</span>
+                </>
+              ) : (
+                <span>
+                  {isGoogleSignup
+                    ? "บันทึกข้อมูลและเข้าสู่ระบบ"
+                    : "ยืนยันการลงทะเบียน"}
+                </span>
+              )}
+            </button>
+          </form>
 
           {!isGoogleSignup && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <InputField
-                  label="รหัสผ่าน"
-                  name="password"
-                  isPassword
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  disabled={isLoading || success}
-                />
-                <InputField
-                  label="ยืนยันรหัสผ่าน"
-                  name="confirmPassword"
-                  isPassword
-                  placeholder="••••••••"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  required
-                  disabled={isLoading || success}
-                />
+              <div className="relative flex items-center py-4 mt-2">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink-0 mx-4 text-slate-400 text-sm font-medium">
+                  หรือ
+                </span>
+                <div className="flex-grow border-t border-slate-200"></div>
               </div>
 
-              {formData.password && (
-                <div className="space-y-1.5 mt-2 px-1">
-                  <div className="flex justify-between items-center text-[11px] font-bold">
-                    <span className="text-slate-500">ความปลอดภัยรหัสผ่าน</span>
-                    <span
-                      className={
-                        strengthScore === 4
-                          ? "text-emerald-600"
-                          : "text-slate-500"
-                      }
-                    >
-                      {strengthText}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${strengthColor}`}
-                      style={{ width: `${strengthPercentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={handleGoogleAuth}
+                disabled={isLoading}
+                className="w-full bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+              >
+                <img
+                  src="https://www.svgrepo.com/show/475656/google-color.svg"
+                  alt="Google Icon"
+                  className="w-5 h-5"
+                />
+                <span>ลงทะเบียนด้วยอีเมลมหาลัย (@kmutnb)</span>
+              </button>
             </>
           )}
+        </div>
+      </div>
 
-          <button
-            type="submit"
-            disabled={
-              isLoading ||
-              success ||
-              (!isGoogleSignup && (!isPasswordSecure || !isPasswordMatch))
-            }
-            className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
+      {/* ─── 📍 MODAL CUSTOM UI ─── */}
+      {modal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className={`bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl text-center flex flex-col items-center animate-in zoom-in-95 duration-300 ${
+              modal.type === "error" ? "animate-shake" : ""
+            }`}
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="animate-spin" size={18} />
-                <span>กำลังดำเนินการ...</span>
-              </>
-            ) : (
-              <span>
-                {isGoogleSignup
-                  ? "บันทึกข้อมูลและเข้าสู่ระบบ"
-                  : "ยืนยันการลงทะเบียน"}
-              </span>
-            )}
-          </button>
-        </form>
-
-        {!isGoogleSignup && (
-          <>
-            <div className="relative flex items-center py-4 mt-2">
-              <div className="flex-grow border-t border-slate-200"></div>
-              <span className="flex-shrink-0 mx-4 text-slate-400 text-sm font-medium">
-                หรือ
-              </span>
-              <div className="flex-grow border-t border-slate-200"></div>
+            <div
+              className={`w-20 h-20 rounded-full flex items-center justify-center mb-5 ${
+                modal.type === "error"
+                  ? "bg-red-50 text-red-500"
+                  : modal.type === "success"
+                    ? "bg-emerald-50 text-emerald-500"
+                    : modal.type === "mail"
+                      ? "bg-blue-50 text-blue-500"
+                      : "bg-blue-50 text-blue-500"
+              }`}
+            >
+              {modal.type === "error" && (
+                <AlertCircle size={40} strokeWidth={2} />
+              )}
+              {modal.type === "success" && (
+                <CheckCircle2 size={40} strokeWidth={2} />
+              )}
+              {modal.type === "mail" && <MailCheck size={40} strokeWidth={2} />}
+              {modal.type === "info" && <Info size={40} strokeWidth={2} />}
             </div>
+
+            <h3 className="text-xl font-bold text-slate-800 mb-2">
+              {modal.title}
+            </h3>
+            <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8">
+              {modal.message}
+            </p>
 
             <button
               type="button"
-              onClick={handleGoogleAuth}
-              disabled={isLoading || success}
-              className="w-full bg-white border border-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-50 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+              onClick={modal.onClose}
+              className={`w-full py-3.5 rounded-xl font-bold transition-all active:scale-95 ${
+                modal.type === "error"
+                  ? "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
+                  : modal.type === "success"
+                    ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+                    : "bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20"
+              }`}
             >
-              <img
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                alt="Google Icon"
-                className="w-5 h-5"
-              />
-              <span>ลงทะเบียนด้วยอีเมลมหาลัย (@kmutnb)</span>
+              {modal.buttonText}
             </button>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

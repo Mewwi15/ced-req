@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false); // 📍 เพิ่มตัวแปรเช็คการโหลดครั้งแรก
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -21,7 +21,6 @@ export const AuthProvider = ({ children }) => {
     setMounted(true);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // 📍 สร้างรายการหน้าเว็บที่คนยังไม่ล็อกอินก็เข้าได้
       const publicPaths = ["/login", "/login/", "/register", "/register/"];
       const isPublicPage = publicPaths.includes(pathname);
 
@@ -38,9 +37,10 @@ export const AuthProvider = ({ children }) => {
             const isAdmin =
               profileData.roles && profileData.roles.includes("admin");
 
-            // 🚦 กฎจราจรข้อ 1: ถ้าล็อกอินแล้ว แต่ดันมาอยู่หน้า Login/Register
-            // ให้ส่งตัวไปยังบ้านของแต่ละคนทันที
-            if (isPublicPage) {
+            // 🚦 ปรับปรุงกฎจราจรข้อ 1:
+            // ถลล็อกอินแล้ว และกำลังอยู่หน้า Login/Login/ ให้ส่งตัวไปหน้าแรกของแต่ละคนทันที
+            // ⚠️ ยกเว้นหน้า Register ห้ามดักส่งตัว เพื่อปล่อยให้หน้า Register แสดง Modal สั่นเตือนเรื่องอีเมลซ้ำเอง
+            if (pathname === "/login" || pathname === "/login/") {
               router.push(isAdmin ? "/admin" : "/dashboard");
             }
             // 🚦 กฎจราจรข้อ 2: ถ้าไม่ใช่แอดมิน แต่พยายามเข้าห้องแอดมิน
@@ -70,18 +70,12 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, [pathname, router]);
 
-  // ─── 🛡️ แก้ไขส่วนการ Render เพื่อฆ่า Error #310 ───
   return (
     <AuthContext.Provider value={{ user, userProfile, loading }}>
-      {/* 
-         ถ้ายังไม่ได้ Mounted (ช่วง Server/First Load) 
-         ให้แสดง children ไปก่อนเพื่อให้ HTML ตรงกัน 
-      */}
       {!mounted ? (
         children
       ) : (
         <>
-          {/* ถ้าโหลดเสร็จแล้วค่อยเลือกว่าจะโชว์ Spinner หรือ Content */}
           {loading ? (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
               <Loader2 className="animate-spin text-emerald-500" size={40} />

@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation"; // 📍 1. นำเข้า usePathname
+import { usePathname } from "next/navigation";
 import { LayoutDashboard, Settings, LogOut, Clock, X } from "lucide-react";
 
 export default function Sidebar({
@@ -10,9 +10,9 @@ export default function Sidebar({
   setIsSidebarOpen,
   handleLogout,
 }) {
-  const pathname = usePathname(); // 📍 2. ดึงที่อยู่ URL ปัจจุบันมาเก็บไว้
+  const pathname = usePathname();
 
-  // 📍 3. สร้างฟังก์ชันเช็คว่าเมนูไหนกำลัง Active อยู่
+  // สร้างฟังก์ชันเช็คว่าเมนูไหนกำลัง Active อยู่
   const isActive = (path) => pathname === path;
 
   return (
@@ -49,8 +49,8 @@ export default function Sidebar({
           </button>
         </div>
 
+        {/* ─── 📋 รายการเมนูหลัก ─── */}
         <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
-          {/* 📍 4. ปรับเงื่อนไขสีของแต่ละปุ่มให้เปลี่ยนตามค่า isActive */}
           <Link
             href="/dashboard"
             className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all border ${
@@ -62,6 +62,7 @@ export default function Sidebar({
             <LayoutDashboard size={20} />
             หน้าหลัก
           </Link>
+
           <Link
             href="/dashboard/history"
             className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all border ${
@@ -73,8 +74,22 @@ export default function Sidebar({
             <Clock size={20} />
             ประวัติคำร้อง
           </Link>
+
+          {/* 🌟 เพิ่มเมนูจัดการข้อมูลส่วนตัว */}
+          <Link
+            href="/dashboard/profile"
+            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all border ${
+              isActive("/dashboard/profile")
+                ? "bg-emerald-50 text-emerald-700 shadow-sm border-emerald-100/50"
+                : "text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 font-medium"
+            }`}
+          >
+            <Settings size={20} />
+            จัดการข้อมูลส่วนตัว
+          </Link>
         </div>
 
+        {/* ─── 👤 โซนโปรไฟล์ด้านล่าง ─── */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/30">
           <div className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-100 shadow-sm rounded-2xl mb-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-500 text-white flex items-center justify-center font-black shadow-sm shrink-0 text-lg">

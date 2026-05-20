@@ -15,7 +15,6 @@ import {
   Loader2,
   Eye,
   Search,
-  Filter,
   Clock,
   CheckCircle2,
   XCircle,
@@ -23,10 +22,60 @@ import {
   ChevronDown,
   Calendar,
   CalendarDays,
+  Inbox,
+  UserCircle2,
+  Hash,
 } from "lucide-react";
 
 import RequestModal from "@/components/admin/RequestModal";
-import { getStatusBadge } from "@/utils/statusHelpers";
+
+// ─── 🎨 Helper: ป้ายสถานะแบบ Dot (แบบเดียวกับฝั่ง User) ───
+const getStatusBadge = (status) => {
+  switch (status) {
+    case "รอดำเนินการ":
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-600 rounded-full border border-amber-500/20 w-max">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <span className="text-[11px] font-bold tracking-wide">
+            รอดำเนินการ
+          </span>
+        </div>
+      );
+    case "กำลังตรวจสอบ":
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-600 rounded-full border border-blue-500/20 w-max">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+          <span className="text-[11px] font-bold tracking-wide">
+            กำลังตรวจสอบ
+          </span>
+        </div>
+      );
+    case "อนุมัติแล้ว":
+    case "เสร็จสิ้น":
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 rounded-full border border-emerald-500/20 w-max">
+          <CheckCircle2 size={12} strokeWidth={3} />
+          <span className="text-[11px] font-bold tracking-wide">
+            อนุมัติแล้ว
+          </span>
+        </div>
+      );
+    case "ถูกปฏิเสธ":
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/10 text-rose-600 rounded-full border border-rose-500/20 w-max">
+          <XCircle size={12} strokeWidth={3} />
+          <span className="text-[11px] font-bold tracking-wide">ถูกปฏิเสธ</span>
+        </div>
+      );
+    default:
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-500/10 text-slate-600 rounded-full border border-slate-500/20 w-max">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+          <span className="text-[11px] font-bold tracking-wide">{status}</span>
+        </div>
+      );
+  }
+};
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -34,33 +83,26 @@ export default function AdminDashboardPage() {
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
 
-  // 📍 1. State สำหรับค้นหาและโหมดการดู
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  // "daily" = ดูรายวัน, "monthly" = ดูทั้งเดือน
   const [viewMode, setViewMode] = useState("daily");
 
-  // วันที่ปัจจุบัน (YYYY-MM-DD)
   const [dateFilter, setDateFilter] = useState(() => {
     const tzoffset = new Date().getTimezoneOffset() * 60000;
     return new Date(Date.now() - tzoffset).toISOString().slice(0, 10);
   });
 
-  // เดือนปัจจุบัน (YYYY-MM)
   const [monthFilter, setMonthFilter] = useState(() => {
     const tzoffset = new Date().getTimezoneOffset() * 60000;
     return new Date(Date.now() - tzoffset).toISOString().slice(0, 7);
   });
 
-  // ─── ฟังก์ชันดึงข้อมูลจาก Firebase ตามโหมดที่เลือก ───
   useEffect(() => {
     setIsLoading(true);
     const reqRef = collection(db, "requests");
     let q;
 
     if (viewMode === "daily" && dateFilter) {
-      // โหมดรายวัน: ดึงตั้งแต่ 00:00:00 ถึง 23:59:59 ของวันนั้น
       const startOfDay = new Date(`${dateFilter}T00:00:00`);
       const endOfDay = new Date(`${dateFilter}T23:59:59.999`);
       q = query(
@@ -70,7 +112,6 @@ export default function AdminDashboardPage() {
         orderBy("createdAt", "desc"),
       );
     } else if (viewMode === "monthly" && monthFilter) {
-      // โหมดรายเดือน: ดึงตั้งแต่วันที่ 1 ถึงวันสุดท้ายของเดือนนั้น
       const [year, month] = monthFilter.split("-");
       const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0);
       const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
@@ -99,7 +140,6 @@ export default function AdminDashboardPage() {
     };
   }, [viewMode, dateFilter, monthFilter, router]);
 
-  // 📍 2. คำนวณสถิติจากการดึงข้อมูลจริง (เปลี่ยนตามวันที่/เดือนที่เลือก)
   const stats = {
     total: requests.length,
     pending: requests.filter(
@@ -109,7 +149,6 @@ export default function AdminDashboardPage() {
     rejected: requests.filter((r) => r.status === "ถูกปฏิเสธ").length,
   };
 
-  // 📍 3. กรองข้อมูลตารางด้วยช่อง Search และ Status
   const filteredRequests = requests.filter((req) => {
     const matchesSearch =
       req.studentInfo?.fullName
@@ -119,84 +158,96 @@ export default function AdminDashboardPage() {
       req.academicWork?.workTitle
         ?.toLowerCase()
         .includes(searchTerm.toLowerCase());
-
     const matchesStatus = statusFilter === "all" || req.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   if (isLoading && requests.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center min-h-screen">
-        <Loader2 className="animate-spin text-emerald-500" size={40} />
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <div className="relative flex justify-center items-center">
+          <div className="absolute animate-ping w-16 h-16 rounded-full bg-emerald-400/20"></div>
+          <div className="w-8 h-8 rounded-full bg-emerald-500 animate-pulse"></div>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <header className="h-20 bg-white border-b border-slate-200 flex items-center px-8 sm:px-10 sticky top-0 z-10 shadow-sm">
-        <h1 className="text-2xl font-black text-slate-800 tracking-tight">
-          ภาพรวมคำร้อง
-        </h1>
-      </header>
+      <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col gap-6 lg:gap-8 pb-28 lg:pb-12 p-4 sm:p-6 lg:p-8">
+        {/* ─── 🌟 Header ─── */}
+        <div className="flex flex-col gap-2 animate-in fade-in duration-500">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold tracking-widest uppercase w-max">
+            <FileText size={14} /> Admin Workspace
+          </div>
+          <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">
+            ระบบจัดการคำร้อง
+          </h1>
+          <p className="text-slate-500 font-medium">
+            ภาพรวมการดำเนินการและจัดการเอกสารของนักศึกษา
+          </p>
+        </div>
 
-      <div className="p-6 sm:p-10 flex-1 space-y-8 overflow-x-hidden">
-        {/* ─── 📊 การ์ดสรุปข้อมูล (คลีนๆ 4 ใบ เปลี่ยนไปตามช่วงเวลา) ─── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <FileText size={28} />
+        {/* ─── 📊 การ์ดสรุปข้อมูล (Bento Grid) ─── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in duration-500 delay-100">
+          <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-start gap-4 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <FileText size={24} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-500">
-                ทั้งหมด ({viewMode === "daily" ? "วัน" : "เดือน"}นี้)
-              </p>
-              <h3 className="text-2xl font-black text-slate-800">
+              <h3 className="text-4xl font-black text-slate-800 mb-1">
                 {stats.total}
               </h3>
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">
+                ทั้งหมด ({viewMode === "daily" ? "วัน" : "เดือน"}นี้)
+              </p>
             </div>
           </div>
-
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <Clock size={28} />
+          <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-start gap-4 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Clock size={24} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-500">รอดำเนินการ</p>
-              <h3 className="text-2xl font-black text-slate-800">
+              <h3 className="text-4xl font-black text-slate-800 mb-1">
                 {stats.pending}
               </h3>
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">
+                รอดำเนินการ
+              </p>
             </div>
           </div>
-
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <CheckCircle2 size={28} />
+          <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-start gap-4 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 size={24} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-500">อนุมัติแล้ว</p>
-              <h3 className="text-2xl font-black text-slate-800">
+              <h3 className="text-4xl font-black text-slate-800 mb-1">
                 {stats.approved}
               </h3>
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">
+                อนุมัติแล้ว
+              </p>
             </div>
           </div>
-
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-              <XCircle size={28} />
+          <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-start gap-4 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <XCircle size={24} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-500">ปฏิเสธ</p>
-              <h3 className="text-2xl font-black text-slate-800">
+              <h3 className="text-4xl font-black text-slate-800 mb-1">
                 {stats.rejected}
               </h3>
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">
+                ถูกปฏิเสธ
+              </p>
             </div>
           </div>
         </div>
 
-        {/* ─── 🔍 แถบเครื่องมือค้นหาและตัวกรองช่วงเวลา ─── */}
-        <div className="flex flex-col xl:flex-row gap-4 justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="relative w-full xl:w-96">
+        {/* ─── 🔍 Toolbar: Search & Filters ─── */}
+        <div className="flex flex-col xl:flex-row gap-4 justify-between items-center animate-in slide-in-from-bottom-8 duration-700 delay-200">
+          <div className="relative w-full xl:w-[400px]">
             <Search
               className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
               size={18}
@@ -206,16 +257,16 @@ export default function AdminDashboardPage() {
               placeholder="ค้นหาชื่อ, รหัส, หรืองานวิจัย..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-500 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all"
+              className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-[1rem] font-bold text-sm text-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all shadow-sm"
             />
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
-            {/* 🌟 ปุ่มสลับโหมด ดูรายวัน / ดูรายเดือน */}
-            <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+            {/* โหมด วัน/เดือน */}
+            <div className="flex bg-slate-100/80 p-1.5 rounded-[1rem] w-full sm:w-auto">
               <button
                 onClick={() => setViewMode("daily")}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl font-bold text-sm transition-all ${
                   viewMode === "daily"
                     ? "bg-white text-emerald-600 shadow-sm"
                     : "text-slate-500 hover:text-slate-700"
@@ -225,7 +276,7 @@ export default function AdminDashboardPage() {
               </button>
               <button
                 onClick={() => setViewMode("monthly")}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl font-bold text-sm transition-all ${
                   viewMode === "monthly"
                     ? "bg-white text-emerald-600 shadow-sm"
                     : "text-slate-500 hover:text-slate-700"
@@ -235,33 +286,31 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {/* 🌟 Input วันที่ หรือ เดือน/ปี (โชว์ตามโหมดที่เลือก) */}
-            <div className="relative w-full sm:w-auto group">
+            {/* Input วันที่ */}
+            <div className="relative w-full sm:w-auto">
               {viewMode === "daily" ? (
                 <input
                   type="date"
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full sm:w-auto px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                  className="w-full sm:w-auto px-4 py-3 bg-white border border-slate-200 rounded-[1rem] font-bold text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm"
                 />
               ) : (
                 <input
                   type="month"
                   value={monthFilter}
                   onChange={(e) => setMonthFilter(e.target.value)}
-                  className="w-full sm:w-auto px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                  className="w-full sm:w-auto px-4 py-3 bg-white border border-slate-200 rounded-[1rem] font-bold text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm"
                 />
               )}
             </div>
 
-            <div className="w-px h-8 bg-slate-200 hidden sm:block mx-1"></div>
-
-            {/* 🌟 ตัวกรองสถานะ */}
-            <div className="relative group w-full sm:w-auto">
+            {/* Filter สถานะ */}
+            <div className="relative w-full sm:w-auto">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full sm:w-auto appearance-none pl-4 pr-10 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                className="w-full sm:w-auto appearance-none pl-4 pr-10 py-3 bg-white border border-slate-200 rounded-[1rem] font-bold text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all cursor-pointer shadow-sm"
               >
                 <option value="all">สถานะทั้งหมด</option>
                 <option value="รอดำเนินการ">รอดำเนินการ</option>
@@ -278,37 +327,54 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* ─── 📋 ตารางข้อมูล ─── */}
-        <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[900px]">
-              <thead className="bg-slate-50/80 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest w-32">
-                    วันที่
-                  </th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">
-                    ผู้ยื่นคำร้อง
-                  </th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">
-                    เรื่อง
-                  </th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest w-40">
-                    สถานะ
-                  </th>
-                  <th className="px-6 py-5 text-center text-xs font-black text-slate-400 uppercase tracking-widest w-32">
-                    จัดการ
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredRequests.length > 0 ? (
-                  filteredRequests.map((req) => (
-                    <tr
-                      key={req.id}
-                      className="hover:bg-slate-50 transition-colors group"
-                    >
-                      <td className="px-6 py-4 text-sm font-medium text-slate-500">
+        {/* ─── 📄 Modern List View (แทนที่ Table เดิม) ─── */}
+        <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-12 duration-700 delay-300">
+          <div className="flex items-center justify-between px-2 mb-2">
+            <span className="text-sm font-bold text-slate-500">
+              พบ {filteredRequests.length} รายการ
+            </span>
+          </div>
+
+          {filteredRequests.length === 0 ? (
+            <div className="bg-white rounded-[2rem] border border-slate-100 flex flex-col items-center justify-center py-20 text-center shadow-sm">
+              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                <Inbox size={32} className="text-slate-300" />
+              </div>
+              <p className="text-slate-700 font-bold text-xl mb-2">
+                ไม่มีคำร้องในช่วงเวลานี้
+              </p>
+              <p className="text-slate-400 font-medium text-sm">
+                ลองเปลี่ยนวันที่ หรือเงื่อนไขการค้นหาดูสิ
+              </p>
+            </div>
+          ) : (
+            filteredRequests.map((req) => (
+              <div
+                key={req.id}
+                onClick={() => setSelectedRequest(req)}
+                className="group flex flex-col lg:flex-row lg:items-center justify-between gap-5 p-5 sm:p-6 rounded-[1.5rem] bg-white border border-slate-100 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5 transition-all duration-300 cursor-pointer"
+              >
+                {/* ข้อมูลซ้าย (ชื่อคนยื่น + รายละเอียด) */}
+                <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6 min-w-0 flex-1">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center shrink-0 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors border border-slate-50 font-black text-xl">
+                    {req.studentInfo?.firstNameTH?.charAt(0) || "U"}
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">
+                        {req.studentInfo?.prefix}
+                        {req.studentInfo?.fullName}
+                      </span>
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-wider rounded-md font-mono">
+                        {req.studentInfo?.studentId}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-slate-500 text-sm leading-snug line-clamp-1">
+                      {req.academicWork?.workTitle || "คำร้องขอความอนุเคราะห์"}
+                    </h4>
+                    <div className="flex items-center gap-3 text-xs font-medium text-slate-400 pt-1">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar size={14} />
                         {req.createdAt
                           ? new Date(
                               req.createdAt.seconds * 1000,
@@ -316,50 +382,31 @@ export default function AdminDashboardPage() {
                               year: "2-digit",
                               month: "short",
                               day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
                             })
                           : "-"}
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-slate-800">
-                          {req.studentInfo?.prefix}
-                          {req.studentInfo?.fullName}
-                        </p>
-                        <p className="text-[11px] text-slate-500 uppercase font-bold">
-                          {req.studentInfo?.studentId}
-                        </p>
-                      </td>
-                      <td
-                        className="px-6 py-4 text-sm font-bold text-slate-700 truncate max-w-[250px]"
-                        title={req.academicWork?.workTitle}
-                      >
-                        {req.academicWork?.workTitle || "-"}
-                      </td>
-                      <td className="px-6 py-4">
-                        {getStatusBadge(req.status)}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => setSelectedRequest(req)}
-                          className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-sm group-hover:bg-emerald-600 group-hover:text-white group-hover:shadow-md transition-all flex items-center justify-center gap-2 mx-auto w-full"
-                        >
-                          <Eye size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan="5"
-                      className="px-6 py-12 text-center text-slate-400 font-medium bg-slate-50/50"
-                    >
-                      ไม่พบข้อมูลคำร้องในช่วงเวลาที่เลือก
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                      <span className="flex items-center gap-1">
+                        <Hash size={12} />{" "}
+                        {req.id.substring(0, 8).toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* สถานะ & ปุ่ม (ขวา) */}
+                <div className="flex items-center justify-between lg:justify-end w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-50 gap-6 shrink-0 mt-2 lg:mt-0">
+                  {getStatusBadge(req.status)}
+                  <button className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-50 text-slate-600 font-bold text-sm group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm w-full sm:w-auto">
+                    <Eye size={16} />{" "}
+                    <span className="sm:hidden lg:inline">ตรวจสอบ</span>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

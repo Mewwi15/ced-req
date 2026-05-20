@@ -7,7 +7,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
 } from "firebase/auth";
-import { auth } from "../../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
@@ -23,45 +24,51 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMounted(true);
-    }, 0);
+    const timer = setTimeout(() => setMounted(true), 0);
     return () => clearTimeout(timer);
   }, []);
 
+  // ─── Email / Password Login ───
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/"); // ล็อกอินสำเร็จให้ไปหน้าหลัก
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      const user = result.user;
+
+      // 🌟 Guard: ยังไม่ verify อีเมล → ส่งไปรอยืนยัน
+      if (!user.emailVerified) {
+        router.push("/verify-email");
+        return;
+      }
+
+      router.push("/");
     } catch (err) {
       setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
       setIsLoading(false);
     }
   };
 
+  // ─── Google Login ───
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setError("");
     const provider = new GoogleAuthProvider();
-    // บังคับให้ผู้ใช้เลือกบัญชี (เผื่อมีล็อกอินค้างไว้หลายอัน)
     provider.setCustomParameters({ prompt: "select_account" });
 
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // 🌟 เพิ่มเงื่อนไขตรวจสอบโดเมนอีเมลของ มจพ.
+      // 🌟 Guard 1: ตรวจโดเมนอีเมล
       const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
       const isKmutnbEmail = allowedDomains.some((domain) =>
         user.email.endsWith(domain),
       );
 
       if (!isKmutnbEmail) {
-        // ถ้าไม่ใช่อีเมลมหาลัย บังคับเตะออกทันที
         await auth.signOut();
         setError(
           "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
@@ -70,7 +77,15 @@ export default function LoginPage() {
         return;
       }
 
-      // ถ้าผ่านเงื่อนไข ถือว่าล็อกอินสำเร็จ พาไปหน้าหลักเลย
+      // 🌟 Guard 2: ตรวจว่ามีบัญชีใน Firestore แล้วหรือยัง
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (!userDoc.exists()) {
+        await auth.signOut();
+        setError("ไม่พบบัญชีในระบบ กรุณาสมัครสมาชิกก่อนเข้าสู่ระบบครับ");
+        setIsLoading(false);
+        return;
+      }
+
       router.push("/");
     } catch (err) {
       console.error(err);
