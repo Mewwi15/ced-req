@@ -227,10 +227,7 @@ export default function RegisterPage() {
 
         // 🌟 เซฟข้อมูลไว้ใน sessionStorage ชั่วคราว
         //    ยัง "ไม่" setDoc ลง Firestore จนกว่าจะกด verify ในอีเมล
-        const emailPrefix = formData.email.split("@")[0];
-        const isStaffEmail =
-          formData.email.endsWith("@kmutnb.ac.th") &&
-          !emailPrefix.startsWith("s");
+        const isStaffEmail = formData.email.endsWith("@fte.kmutnb.ac.th");
 
         sessionStorage.setItem(
           "pendingUser",
@@ -252,10 +249,7 @@ export default function RegisterPage() {
       }
 
       // ─── กรณี Google signup: verified แล้ว → setDoc ได้เลย ───
-      const emailPrefix = formData.email.split("@")[0];
-      const isStaffEmail =
-        formData.email.endsWith("@kmutnb.ac.th") &&
-        !emailPrefix.startsWith("s");
+      const isStaffEmail = formData.email.endsWith("@fte.kmutnb.ac.th");
 
       await setDoc(doc(db, "users", googleUid), {
         uid: googleUid,
