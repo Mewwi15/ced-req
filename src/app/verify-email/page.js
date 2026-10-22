@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { auth, db } from "../../lib/firebase";
+import { getRegistrationRoles } from "@/lib/userRoles";
 import { doc, setDoc } from "firebase/firestore";
 import { sendEmailVerification, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -61,8 +62,10 @@ export default function VerifyEmailPage() {
         const raw = sessionStorage.getItem("pendingUser");
         if (raw) {
           const pending = JSON.parse(raw);
+          await auth.currentUser.getIdToken(true);
           await setDoc(doc(db, "users", pending.uid), {
             ...pending,
+            roles: getRegistrationRoles(auth.currentUser.email),
             createdAt: new Date(),
             pdpaConsent: true,
             emailVerified: true,

@@ -9,6 +9,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
+import { getRegistrationRoles } from "@/lib/userRoles";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -227,8 +228,6 @@ export default function RegisterPage() {
 
         // 🌟 เซฟข้อมูลไว้ใน sessionStorage ชั่วคราว
         //    ยัง "ไม่" setDoc ลง Firestore จนกว่าจะกด verify ในอีเมล
-        const isStaffEmail = formData.email.endsWith("@fte.kmutnb.ac.th");
-
         sessionStorage.setItem(
           "pendingUser",
           JSON.stringify({
@@ -239,7 +238,7 @@ export default function RegisterPage() {
             lastNameTH: formData.lastNameTH,
             studentId: formData.studentId,
             phoneNumber: formData.phoneNumber,
-            roles: [isStaffEmail ? "staff" : "student"],
+            roles: getRegistrationRoles(userCredential.user.email),
           }),
         );
 
@@ -249,8 +248,6 @@ export default function RegisterPage() {
       }
 
       // ─── กรณี Google signup: verified แล้ว → setDoc ได้เลย ───
-      const isStaffEmail = formData.email.endsWith("@fte.kmutnb.ac.th");
-
       await setDoc(doc(db, "users", googleUid), {
         uid: googleUid,
         email: formData.email,
@@ -259,7 +256,7 @@ export default function RegisterPage() {
         lastNameTH: formData.lastNameTH,
         studentId: formData.studentId,
         phoneNumber: formData.phoneNumber,
-        roles: [isStaffEmail ? "staff" : "student"],
+        roles: getRegistrationRoles(auth.currentUser?.email),
         createdAt: new Date(),
         pdpaConsent: true,
         emailVerified: true,

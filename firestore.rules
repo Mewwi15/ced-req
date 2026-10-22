@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasVerifiedFteEmail() {
+      return signedIn()
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '').lower()
+             .matches('^[^@ ]+@fte[.]kmutnb[.]ac[.]th$');
+    }
+
+    function isAdmin() {
+      let profile = /databases/$(database)/documents/users/$(request.auth.uid);
+      return signedIn()
+        && exists(profile)
+        && get(profile).data.get('roles', []).hasAny(['admin']);
+    }
+
+    // อีเมล FTE ที่ยืนยันแล้วสมัครเป็น admin ได้ ผู้ใช้อื่นเปลี่ยน role ตัวเองไม่ได้
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && (request.resource.data.roles == ['student']
+            || request.resource.data.roles == ['staff']
+            || (request.resource.data.roles == ['admin']
+                && hasVerifiedFteEmail()
+                && request.resource.data.email == request.auth.token.email));
+
+      allow update: if signedIn() && (
+        isAdmin()
+        || (request.auth.uid == userId
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['roles', 'uid', 'email']))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // คำร้อง: นักศึกษาสร้าง/อ่านของตัวเอง, แอดมินอ่าน/เปลี่ยนสถานะได้ทั้งหมด
+    match /requests/{requestId} {
+      allow read: if signedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'รอดำเนินการ';
+
+      allow update, delete: if isAdmin();
+    }
+  }
+}
