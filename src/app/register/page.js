@@ -185,7 +185,11 @@ export default function RegisterPage() {
         return;
       }
 
-      const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
+      const allowedDomains = [
+        "@kmutnb.ac.th",
+        "@email.kmutnb.ac.th",
+        "@fte.kmutnb.ac.th",
+      ];
       const isKmutnbEmail = allowedDomains.some((domain) =>
         formData.email.endsWith(domain),
       );
@@ -194,7 +198,7 @@ export default function RegisterPage() {
         showModal(
           "error",
           "อีเมลไม่ถูกต้อง",
-          "กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
+          "กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th, @email.kmutnb.ac.th หรือ @fte.kmutnb.ac.th) เท่านั้นครับ",
         );
         setIsLoading(false);
         return;
@@ -304,7 +308,11 @@ export default function RegisterPage() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
+      const allowedDomains = [
+        "@kmutnb.ac.th",
+        "@email.kmutnb.ac.th",
+        "@fte.kmutnb.ac.th",
+      ];
       const isKmutnbEmail = allowedDomains.some((domain) =>
         user.email.endsWith(domain),
       );
@@ -314,7 +322,7 @@ export default function RegisterPage() {
         showModal(
           "error",
           "โดเมนไม่ถูกต้อง",
-          "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
+          "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th, @email.kmutnb.ac.th หรือ @fte.kmutnb.ac.th) เท่านั้นครับ",
         );
         setIsLoading(false);
         return;

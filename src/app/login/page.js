@@ -63,7 +63,11 @@ export default function LoginPage() {
       const user = result.user;
 
       // 🌟 Guard 1: ตรวจโดเมนอีเมล
-      const allowedDomains = ["@kmutnb.ac.th", "@email.kmutnb.ac.th"];
+      const allowedDomains = [
+        "@kmutnb.ac.th",
+        "@email.kmutnb.ac.th",
+        "@fte.kmutnb.ac.th",
+      ];
       const isKmutnbEmail = allowedDomains.some((domain) =>
         user.email.endsWith(domain),
       );
@@ -71,7 +75,7 @@ export default function LoginPage() {
       if (!isKmutnbEmail) {
         await auth.signOut();
         setError(
-          "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th หรือ @email.kmutnb.ac.th) เท่านั้นครับ",
+          "ไม่อนุญาตให้ใช้อีเมลส่วนตัว กรุณาใช้อีเมลของมหาวิทยาลัย (@kmutnb.ac.th, @email.kmutnb.ac.th หรือ @fte.kmutnb.ac.th) เท่านั้นครับ",
         );
         setIsLoading(false);
         return;
